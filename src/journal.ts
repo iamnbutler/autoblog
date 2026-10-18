@@ -9,6 +9,7 @@ import { redact } from "./redact";
  *   notes/<Topic>.md      short reference pages on a topic, revised in place as we learn more
  *   posts/<Topic>.md      pieces Nate could publish: a project, or a way of working
  *   projects/<name>.md    hub note per project: what it is, plus every entry that touches it
+ *   timeline/<date>.md    the work log: one line per thing done that day, any project
  *   archive/<date>/       earlier entries, set aside; nothing reads them
  *   README.md             generated: what this vault is, nothing more
  * Note name = title, so [[Title]] resolves; names are unique across notes and posts.
@@ -445,6 +446,7 @@ function regenerate(cfg: Config) {
     "- `notes/`: short reference pages on a topic, kept current",
     "- `posts/`: longer pieces on a project or a way of working",
     "- `projects/`: what each project is, and what touches it",
+    "- `timeline/`: a work log across every project, one file per day",
     "- `archive/`: earlier entries, set aside",
     ...(cfg.site?.url ? [`- ${cfg.site.url}: the private site`] : []),
   ];

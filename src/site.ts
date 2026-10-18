@@ -3,6 +3,7 @@ import { basename, join } from "node:path";
 import { Marked, type TokenizerAndRendererExtension } from "marked";
 import type { Config } from "./config";
 import { listEntries, noteName, projectSummary, type EntryMeta } from "./journal";
+import { dayLines, timelineDir } from "./timeline";
 
 /*
  * Static site for the vault, with Obsidian semantics: [[wikilinks]] resolve by note name
@@ -103,7 +104,7 @@ function page(title: string, main: string, opts: { siteName: string; depth?: str
 <link rel="stylesheet" href="/style.css">
 </head>
 <body>
-<header class="site"><a href="/" class="brand">${esc(opts.siteName)}</a><nav><a href="/projects/">projects</a><a href="/tags/">tags</a></nav></header>
+<header class="site"><a href="/" class="brand">${esc(opts.siteName)}</a><nav><a href="/timeline/">timeline</a><a href="/projects/">projects</a><a href="/tags/">tags</a></nav></header>
 <main>
 ${main}
 </main>
@@ -119,6 +120,12 @@ export function buildSite(cfg: Config, out: string, siteName: string) {
   const entries = all.filter((n) => n.kind !== "project").sort((a, b) => b.meta!.updated.localeCompare(a.meta!.updated));
   const projects = all.filter((n) => n.kind === "project").sort((a, b) => a.name.localeCompare(b.name));
   const about = (pr: Note) => entries.filter((e) => e.meta!.projects.some((p) => p.toLowerCase() === pr.name.toLowerCase()));
+  // The timeline: one file per day, one "- thing: what happened" line per piece of work.
+  const tdir = timelineDir(cfg);
+  const days = (existsSync(tdir) ? readdirSync(tdir) : []).filter((f) => /^\d{4}-\d{2}-\d{2}\.md$/.test(f)).map((f) => f.slice(0, -3)).sort().reverse();
+  const logged = days.map((day) => ({ day, lines: dayLines(cfg, day) }));
+  const linesAbout = (pr: Note) =>
+    logged.flatMap(({ day, lines }) => lines.filter((l) => l.toLowerCase().startsWith(`- [[${pr.name.toLowerCase()}]]`)).map((l) => ({ day, line: l })));
   const backlinks = (n: Note) =>
     all.filter((o) => o !== n && o.links.has(n.name.toLowerCase())).sort((a, b) => (b.meta?.updated ?? "").localeCompare(a.meta?.updated ?? ""));
 
@@ -168,14 +175,26 @@ ${render(e.body)}
       page(
         pr.name,
         `<article><p class="eyebrow">project</p><h1>${esc(pr.name)}</h1>${render(pr.body)}</article>
-${group("post", "Posts")}${group("note", "Notes")}${es.length ? "" : `<p class="empty">Nothing in the journal touches this project yet.</p>`}
+${group("post", "Posts")}${group("note", "Notes")}${es.length || linesAbout(pr).length ? "" : `<p class="empty">Nothing in the journal touches this project yet.</p>`}
+${(() => {
+  const ls = linesAbout(pr).slice(0, 30);
+  return ls.length ? `<section class="list"><h2>Timeline</h2>${render(ls.map(({ day, line }) => `- ${day} · ${line.replace(/^- \[\[[^\]]+\]\]:\s*/, "")}`).join("\n"))}</section>` : "";
+})()}
 ${refs.length ? `<aside class="links"><section><h2>Also linked from</h2><ul>${refs.map((r) => `<li><a href="${r.url}">${esc(r.title)}</a></li>`).join("")}</ul></section></aside>` : ""}`,
         { siteName },
       ),
     );
   }
 
-  const active = projects.filter((pr) => about(pr).length);
+  const active = projects.filter((pr) => about(pr).length || linesAbout(pr).length);
+  emit(
+    "/timeline/",
+    page(
+      "Timeline",
+      `<h1>Timeline</h1>${logged.length ? logged.map(({ day, lines }) => `<section class="day"><h2>${day}</h2>${render(lines.join("\n"))}</section>`).join("\n") : `<p class="empty">Nothing logged yet.</p>`}`,
+      { siteName },
+    ),
+  );
   emit(
     "/projects/",
     page(
@@ -225,7 +244,7 @@ ${refs.length ? `<aside class="links"><section><h2>Also linked from</h2><ul>${re
       { siteName },
     ),
   );
-  return { notes: noteEntries.length, posts: posts.length, projects: active.length, tags: tags.size };
+  return { notes: noteEntries.length, posts: posts.length, projects: active.length, tags: tags.size, days: days.length };
 }
 
 const SEARCH_JS = `

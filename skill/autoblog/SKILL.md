@@ -59,4 +59,6 @@ autoblog show "<name>"         # print one entry
 autoblog path                  # where the journal lives
 ```
 
+`timeline/` holds a day-by-day work log across every project, written automatically. Grep it for "when did we ship X?". Don't write to it yourself.
+
 When the user asks "how did we do X?" or "did we solve this before?", search the journal before you start digging.

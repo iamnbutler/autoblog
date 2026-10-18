@@ -22,6 +22,8 @@ This repo is the machinery. The journal lives in a separate private repo.
 
 **Links.** Writers don't add `[[links]]`. After every write or revise, a background `autoblog link` asks `claude -p` (`linkModel`, default `sonnet`) which phrases in the entry name another entry or a project, and code links the first mention of each, so prose is never rewritten. Links to names that don't exist are unlinked. Once a day the sweep relinks entries whose text changed, and offers every other entry only the names that appeared since, so older entries link forward to newer ones. Then the site redeploys.
 
+**Timeline.** Alongside notes and posts there's a work log: `timeline/YYYY-MM-DD.md`, one line per thing done that day in any project (`- [[next-cloud]]: Added canvas posts: …`). It has no bar. On each sweep, a fast model (`timelineModel`, default `haiku`) reads each idle session's new activity day by day, and adds up to 12 lines per session-day, skipping what's already logged. `autoblog timeline --from <transcripts…>` backfills old sessions. The site has a `/timeline/` page, and each project page shows its recent lines.
+
 **Manual.** `/autoblog`, `/autoblog <topic>`, or "write up an autoblog for this", in any agent that loads skills.
 
 ## What goes in

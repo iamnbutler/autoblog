@@ -147,7 +147,7 @@ function countLines(path: string) {
 }
 
 /** Sessions that run inside the journal or this repo's reviewer are never reviewed. */
-function isOwnSession(cfg: Config, d: Delta) {
+export function isOwnSession(cfg: Config, d: { cwd?: string }) {
   if (!d.cwd) return false;
   return d.cwd.startsWith(resolve(cfg.journal)) || d.cwd.startsWith(STATE_DIR);
 }

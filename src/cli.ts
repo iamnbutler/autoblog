@@ -1,11 +1,12 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
 import { LOG_PATH, loadConfig, REPO_ROOT } from "./config";
 import { archiveAll, commitLocked, ensureJournal, ensureProjectNote, findEntry, listEntries, projectFor, projectSummary, reviseEntry, TYPES, writeEntry, type EntryType } from "./journal";
 import { logDecision, readBar, sweep } from "./review";
 import { linkAfterWrite, linkDue, linkNamed } from "./link";
+import { dayLines, timelineDir, timelinePass } from "./timeline";
 import { checkpoint, type HookInput } from "./inband";
 import { readDelta } from "./transcripts";
 import { init, install, uninstall } from "./install";
@@ -22,6 +23,8 @@ Usage
   autoblog ls [--notes|--posts] [-n N]
                                     entries, most recently updated first
   autoblog search <words...>        grep notes and posts (check before writing a new topic)
+  autoblog timeline [-n days] [--from <transcript.jsonl...>] [--dry-run]
+                                    the work log: recent days, or log given transcripts (a backfill)
   autoblog link [name...] [--due] [--dry-run]
                                     add [[links]] between entries (runs after every write, and daily)
   autoblog project [name] [--summary "..."]
@@ -210,8 +213,26 @@ async function main() {
     case "sweep": {
       const { values } = parseArgs({ args: rest, options: { "dry-run": { type: "boolean" }, verbose: { type: "boolean", short: "v" } } });
       await sweep(cfg, { dryRun: values["dry-run"], verbose: values.verbose || values["dry-run"] });
+      timelinePass(cfg, { dryRun: values["dry-run"], verbose: values.verbose || values["dry-run"] });
       // Once a day, older entries pick up links to whatever was written since.
       linkDue(cfg, { daily: true, dryRun: values["dry-run"] });
+      return;
+    }
+
+    case "timeline": {
+      const { values, positionals } = parseArgs({
+        args: rest,
+        allowPositionals: true,
+        options: { from: { type: "boolean" }, n: { type: "string", short: "n" }, "dry-run": { type: "boolean" } },
+      });
+      if (values.from) {
+        const added = timelinePass(cfg, { only: positionals, dryRun: values["dry-run"], verbose: true });
+        if (!values["dry-run"]) console.log(`added ${added} line${added === 1 ? "" : "s"}`);
+        return;
+      }
+      const dir = timelineDir(cfg);
+      const days = existsSync(dir) ? readdirSync(dir).filter((f) => f.endsWith(".md")).map((f) => f.slice(0, -3)).sort().reverse() : [];
+      for (const day of days.slice(0, Number(values.n ?? 7))) console.log(`${day}\n${dayLines(cfg, day).map((l) => `  ${l}`).join("\n")}\n`);
       return;
     }
 
@@ -296,7 +317,7 @@ async function main() {
           return;
         case "build": {
           const s = build(cfg);
-          return console.log(`built ${s.notes} notes, ${s.posts} posts, ${s.projects} projects, ${s.tags} tags -> ~/.autoblog/site/dist`);
+          return console.log(`built ${s.notes} notes, ${s.posts} posts, ${s.days} timeline days, ${s.projects} projects, ${s.tags} tags -> ~/.autoblog/site/dist`);
         }
         case "open":
           spawnSync("open", [cfg.site?.url ?? "https://dash.cloudflare.com"]);

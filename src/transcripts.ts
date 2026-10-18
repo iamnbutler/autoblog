@@ -113,6 +113,51 @@ export function readDelta(path: string, from: number, maxChars: number): Delta {
   return d;
 }
 
+const pad = (n: number) => String(n).padStart(2, "0");
+const localDay = (t: Date) => `${t.getFullYear()}-${pad(t.getMonth() + 1)}-${pad(t.getDate())}`;
+
+/**
+ * Like readDelta, but split by the local day each record happened on, so a session that
+ * runs past midnight (or a backfill of a weeks-long one) lands on the right days.
+ */
+export function readDays(path: string, from: number, maxChars: number): (Delta & { day: string })[] {
+  const source = sourceOf(path);
+  const lines = readFileSync(path, "utf8").split("\n").filter(Boolean);
+  const meta: Delta = { source, text: "", toolCalls: 0, userTurns: 0, lines: lines.length };
+  const days = new Map<string, { d: Delta & { day: string }; parts: string[] }>();
+  let day = "";
+  lines.forEach((raw, i) => {
+    let rec: any;
+    try {
+      rec = JSON.parse(raw);
+    } catch {
+      return;
+    }
+    const t = rec.timestamp ? new Date(rec.timestamp) : null;
+    if (t && !isNaN(+t)) day = localDay(t);
+    const entries = source === "claude" ? claudeEntries(rec, meta) : codexEntries(rec, meta);
+    if (i < from || !day || !entries.length) {
+      if (!meta.opener) meta.opener = entries.find((e) => e.startsWith("USER: "))?.slice(6);
+      return;
+    }
+    let b = days.get(day);
+    if (!b) days.set(day, (b = { d: { ...meta, day, text: "", toolCalls: 0, userTurns: 0 }, parts: [] }));
+    for (const e of entries) {
+      if (e.startsWith("USER: ")) b.d.userTurns++;
+      if (e.startsWith("TOOL ")) b.d.toolCalls++;
+      b.parts.push(e);
+    }
+  });
+  return [...days.values()].map(({ d, parts }) => {
+    let text = parts.join("\n");
+    if (text.length > maxChars) {
+      const head = Math.floor(maxChars * 0.25);
+      text = `${text.slice(0, head)}\n\n…[${text.length - maxChars} chars elided]…\n\n${text.slice(-(maxChars - head))}`;
+    }
+    return { ...d, session: meta.session, cwd: meta.cwd, opener: meta.opener, text };
+  });
+}
+
 function claudeEntries(rec: any, d: Delta): string[] {
   if (rec.sessionId && !d.session) d.session = rec.sessionId;
   if (rec.cwd && !d.cwd) d.cwd = rec.cwd;
