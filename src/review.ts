@@ -4,6 +4,7 @@ import { spawnSync } from "node:child_process";
 import { LOCK_PATH, LOG_PATH, REPO_ROOT, STATE_DIR, STATE_PATH, type Config } from "./config";
 import { discover, readDelta, sourceOf, type Delta } from "./transcripts";
 import { appendUpdate, listPosts, projectFor, writePost } from "./journal";
+import { inbandTranscripts } from "./inband";
 
 type State = { transcripts: Record<string, { lines: number; reviewedAt: string }> };
 
@@ -19,7 +20,7 @@ const SCHEMA = {
     reason: { type: "string" },
     posts: {
       type: "array",
-      maxItems: 2,
+      maxItems: 1,
       items: {
         type: "object",
         properties: {
@@ -58,7 +59,7 @@ function saveState(s: State) {
   writeFileSync(STATE_PATH, JSON.stringify(s, null, 2));
 }
 
-function log(entry: Record<string, unknown>) {
+export function logDecision(entry: Record<string, unknown>) {
   mkdirSync(STATE_DIR, { recursive: true });
   appendFileSync(LOG_PATH, JSON.stringify({ at: new Date().toISOString(), ...entry }) + "\n");
 }
@@ -106,7 +107,9 @@ export async function sweep(cfg: Config, opts: SweepOpts = {}) {
     const only = new Set((opts.only ?? []).map((p) => resolve(p)));
     const say = (m: string) => opts.verbose && console.error(m);
 
-    const candidates = discover(cfg.sources).filter((t) => only.size === 0 || only.has(t.path));
+    // Sessions an agent reflects on in-band are its own business; only orphans get reviewed here.
+    const inband = inbandTranscripts();
+    const candidates = discover(cfg.sources).filter((t) => (only.size === 0 ? !inband.has(t.path) : only.has(t.path)));
     for (const f of only) if (!candidates.some((c) => c.path === f) && existsSync(f)) candidates.push({ path: f, source: sourceOf(f), mtimeMs: now });
 
     for (const t of candidates) {
@@ -129,7 +132,7 @@ export async function sweep(cfg: Config, opts: SweepOpts = {}) {
       }
       if (!opts.force && (delta.toolCalls < cfg.minToolCalls || delta.userTurns === 0)) {
         say(`skip (small: ${delta.toolCalls} tools) ${t.path}`);
-        log({ transcript: t.path, decision: "skip-small", toolCalls: delta.toolCalls });
+        logDecision({ source: "sweep", transcript: t.path, decision: "skip-small", toolCalls: delta.toolCalls });
         mark();
         continue;
       }
@@ -186,7 +189,7 @@ async function reviewDelta(
 
   const judgment = runJudge(cfg, input);
   if (!judgment) {
-    log({ transcript: ctx.transcript, decision: "error" });
+    logDecision({ source: "sweep", transcript: ctx.transcript, decision: "error" });
     return null;
   }
 
@@ -194,7 +197,7 @@ async function reviewDelta(
   const posts = judgment.posts ?? [];
   for (const p of posts) {
     if (p.signal < cfg.minSignal) {
-      log({ transcript: ctx.transcript, decision: "below-signal", title: p.title, signal: p.signal });
+      logDecision({ source: "sweep", transcript: ctx.transcript, decision: "below-signal", title: p.title, signal: p.signal });
       continue;
     }
     if (ctx.dryRun) {
@@ -214,7 +217,8 @@ async function reviewDelta(
     if (f) written.push(f);
   }
   if (ctx.verbose || ctx.dryRun) console.error(`reason: ${judgment.reason}`);
-  log({
+  logDecision({
+    source: "sweep",
     transcript: ctx.transcript,
     project,
     decision: posts.length || judgment.updates?.length ? "write" : "skip",
@@ -226,8 +230,12 @@ async function reviewDelta(
   return written;
 }
 
+export function readBar(): string {
+  return readFileSync(join(REPO_ROOT, "prompts", "bar.md"), "utf8");
+}
+
 function runJudge(cfg: Config, input: string): Judgment | null {
-  const system = readFileSync(join(REPO_ROOT, "prompts", "review.md"), "utf8");
+  const system = readFileSync(join(REPO_ROOT, "prompts", "review.md"), "utf8").replace("{{BAR}}", readBar());
   const r = spawnSync(
     "claude",
     [

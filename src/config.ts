@@ -16,7 +16,11 @@ export type Config = {
   journal: string;
   /** Model used by the auto-mode reviewer (any `claude --model` value). */
   model: string;
-  /** A transcript must be untouched this long before it is reviewed: the "end of the lane". */
+  /** In-band: a Stop hook asks the agent to reflect once this many tool calls pile up. */
+  reflectEvery: number;
+  /** In-band, when the harness gives no transcript to measure: reflect every N turns. */
+  reflectEveryTurns: number;
+  /** Fallback sweep: a transcript must be untouched this long before it is reviewed. */
   idleMinutes: number;
   /** Deltas with fewer tool calls than this are skipped without calling the model. */
   minToolCalls: number;
@@ -34,7 +38,9 @@ export type Config = {
 
 export const DEFAULTS: Config = {
   journal: join(HOME, "code", "autoblog-journal"),
-  model: "sonnet",
+  model: "opus",
+  reflectEvery: 40,
+  reflectEveryTurns: 6,
   idleMinutes: 20,
   minToolCalls: 8,
   minSignal: 1,

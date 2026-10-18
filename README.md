@@ -8,25 +8,28 @@ This repo is the machinery. The journal lives in a separate private repo.
 
 ## Modes
 
-**Auto (always on).** This mirrors the tail end of a `lane` lifecycle (reflect before landing): when a session goes idle, a reviewer reads what happened and decides whether anything is worth keeping. The default answer is *nothing*. The bar and its tuning live in [`prompts/review.md`](prompts/review.md).
+**Auto (always on, in-band).** This mirrors the tail end of a `lane` lifecycle, where you reflect before landing. The agent doing the work decides what's worth writing, because only it has the whole context, including the thing from day one of a multi-day session that turned out to matter on day three.
 
-- A transcript counts as "done" after `idleMinutes` (20) without activity, or when Claude Code fires `SessionEnd`.
-- Deltas under `minToolCalls` (8) are skipped without calling the model.
-- The reviewer (`claude -p`, default `sonnet`) sees the condensed transcript, plus the journal's existing posts for that project so it can append an update instead of duplicating.
-- Each post gets a **signal**: 1 is firehose, 2 is solid, 3 is a jewel. `minSignal` filters what gets written. `autoblog ls --jewels` and the journal README surface the 3s.
-- Every decision, including each skip and its one-line reason, goes to `~/.autoblog/decisions.jsonl`. `autoblog log` shows them, so you can tune the prompt on real misses.
+- A `Stop` hook (Claude Code and Codex) counts tool calls since the session's last checkpoint. It reads only the bytes appended since then, so it costs nothing on a 40MB transcript. Once `reflectEvery` (40) calls pile up, the hook asks the agent to reflect before it stops.
+- The agent reads the bar (`autoblog bar`, i.e. [`prompts/bar.md`](prompts/bar.md)), looks back over the whole session, and does exactly one thing: `autoblog write`, `autoblog update <post>`, or `autoblog skip "<reason>"`. Most checkpoints end in a skip.
+- Checkpoints come every chunk of work, so each chunk is reflected on while it's still in context. The prompt also gives the agent its own transcript path, so it can grep details that compaction dropped.
+- The decision and its reason are logged to `~/.autoblog/decisions.jsonl`. `autoblog log` shows them; tune `prompts/bar.md` on real misses.
 
-**Manual.** `/autoblog`, `/autoblog <topic>`, or "write up an autoblog for this" in any agent that loads skills. The agent writes the post itself with full context, via `autoblog write`.
+**Fallback sweep.** For transcripts no hook ever claimed (sessions from before install, or harnesses without hooks), a launchd job runs every 20 minutes. It hands idle transcripts to `claude -p` (`model`, default `opus`) with [`prompts/review.md`](prompts/review.md) plus the same bar. It sees only a condensed transcript, so it's second best.
+
+**Manual.** `/autoblog`, `/autoblog <topic>`, or "write up an autoblog for this", in any agent that loads skills.
+
+## What a post is
+
+The bar is the product, so read [`prompts/bar.md`](prompts/bar.md). In short, a post is a **story worth telling**, written for you a year from now, having forgotten the project entirely. It's a short blog post: what the project is, what we were after, what got in the way, what turned out to be true, and the takeaway that outlives the project, with an optional `## Details` section of commands at the end. One gotcha with no story isn't a post. Each post gets a **signal**: 1 is narrow, 2 is a reusable lesson, 3 is a jewel. `autoblog ls --jewels` lists the 3s.
 
 ## Wiring
 
 | Agent | Auto | Manual |
 | --- | --- | --- |
-| Claude Code | `SessionEnd` hook reviews the finished session. `Stop` hook nudges a sweep, throttled to every 10m. | skill at `~/.claude/skills/autoblog` |
-| Codex | launchd sweep reads `~/.codex/sessions/**.jsonl` | skill at `~/.codex/skills/autoblog`, `~/.agents/skills/autoblog` |
-| Anything else | add a reader in `src/transcripts.ts` | point it at `skill/autoblog/SKILL.md`, or just call `autoblog write` |
-
-A launchd agent runs `autoblog sweep` every 20 minutes, so sessions that never "end" still get reviewed. Hooks never block: they hand off to a detached process and exit.
+| Claude Code | `Stop` hook in `~/.claude/settings.json` | skill at `~/.claude/skills/autoblog` |
+| Codex | `Stop` hook in `~/.codex/hooks.json` (approve once via `/hooks`) | skill at `~/.codex/skills/autoblog` and `~/.agents/skills/autoblog` |
+| Anything else | a Stop hook calling `autoblog hook --agent <name>` (it emits `{"decision":"block","reason":...}`), or the fallback sweep with a reader in `src/transcripts.ts` | `skill/autoblog/SKILL.md`, or just `autoblog write` |
 
 ## Install
 
@@ -38,12 +41,13 @@ git clone https://github.com/iamnbutler/autoblog ~/code/autoblog
 ~/code/autoblog/bin/autoblog install --journal-repo <you>/autoblog-journal
 ```
 
-`install` clones the journal and links `~/.local/bin/autoblog`. It also links the skill into each harness, adds the Claude Code hooks to `~/.claude/settings.json`, and loads the launchd agent. On first run it only watches transcripts from the last `lookbackHours` (24) and doesn't backfill everything. `autoblog uninstall` reverses all of it except the journal and `~/.autoblog`.
+`install` clones the journal and links `~/.local/bin/autoblog`. It also links the skill into each harness, adds the `Stop` hooks for Claude Code and Codex, and loads the launchd fallback. On first run it only watches transcripts from the last `lookbackHours` (24) and doesn't backfill everything. `autoblog uninstall` reverses all of it except the journal and `~/.autoblog`.
 
 ## CLI
 
 ```
-autoblog write --title <t> [--kind k] [--tags a,b] [--signal 1-3] < body.md
+autoblog write --title <t> [--kind k] [--tags a,b] [--signal 1-3] [--mode auto] < body.md
+autoblog update <post> < more.md   autoblog skip "<reason>"   autoblog bar
 autoblog search <words...>       autoblog ls [--jewels]       autoblog log
 autoblog sweep [--dry-run -v]    autoblog review <transcript.jsonl> [--dry-run]
 ```
@@ -55,7 +59,9 @@ autoblog sweep [--dry-run -v]    autoblog review <transcript.jsonl> [--dry-run]
 ```json
 {
   "journal": "~/code/autoblog-journal",
-  "model": "sonnet",
+  "model": "opus",
+  "reflectEvery": 40,
+  "reflectEveryTurns": 6,
   "idleMinutes": 20,
   "minToolCalls": 8,
   "minSignal": 1,
@@ -77,4 +83,4 @@ Each post has frontmatter: `title, date, project, kind, signal, tags, mode, agen
 
 ## Cost
 
-Auto mode spends model tokens. Each review sends one condensed transcript of at most `maxChars`, about 30k tokens, to `model`. The size and idle gates keep this to roughly one review per real chunk of work. Set `"model": "haiku"` or raise `minToolCalls` to spend less.
+In-band reflection is one extra step for the agent you're already running, and most checkpoints end in a one-line skip. The fallback sweep makes one `claude -p` call per orphaned idle transcript.

@@ -1,34 +1,32 @@
-import { spawn, spawnSync } from "node:child_process";
-import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
-import { LOG_PATH, REPO_ROOT, STATE_DIR, loadConfig } from "./config";
-import { commit, ensureJournal, listPosts, writePost } from "./journal";
-import { sweep } from "./review";
+import { LOG_PATH, loadConfig } from "./config";
+import { appendUpdate, commit, ensureJournal, listPosts, projectFor, writePost } from "./journal";
+import { logDecision, readBar, sweep } from "./review";
+import { checkpoint, type HookInput } from "./inband";
 import { install, uninstall } from "./install";
 
 const HELP = `autoblog: an effortless private journal written by your agents
 
 Usage
-  autoblog write --title <t> [--kind k] [--tags a,b] [--signal 1-3] [--agent a] < body.md
+  autoblog write --title <t> [--kind k] [--tags a,b] [--signal 1-3] [--agent a] [--mode manual|auto] < body.md
+  autoblog update <post path> < more.md   append a dated update to an existing post
+  autoblog skip "<reason>"          record that a checkpoint found nothing worth writing
+  autoblog bar                      print the bar for what is worth writing
   autoblog search <words...>        grep the journal, newest first
   autoblog ls [--jewels] [-n 20]    list recent posts
-  autoblog log [-n 20]              recent auto-mode decisions (for tuning the reviewer)
-  autoblog sweep [--dry-run] [-v]   review idle transcripts now (what launchd runs)
+  autoblog log [-n 20]              recent auto-mode decisions, in-band and sweep (for tuning)
+  autoblog sweep [--dry-run] [-v]   fallback: review idle transcripts no agent claimed in-band
   autoblog review <transcript> [--dry-run]
                                     review one transcript, ignoring idle and size gates
-  autoblog hook                     Claude Code hook entrypoint (reads hook JSON on stdin)
+  autoblog hook [--agent codex]     Stop hook entrypoint (reads hook JSON on stdin)
   autoblog install [--journal-repo owner/name] [--no-launchd] [--no-hooks]
   autoblog uninstall
   autoblog reindex                  rebuild the journal index after hand edits, commit, push
   autoblog path                     print the journal directory
 `;
-
-const SELF = [process.execPath, join(REPO_ROOT, "src", "cli.ts")];
-
-function detached(args: string[]) {
-  spawn(SELF[0], [SELF[1], ...args], { detached: true, stdio: "ignore", cwd: STATE_DIR }).unref();
-}
 
 async function readStdin(): Promise<string> {
   if (process.stdin.isTTY) return "";
@@ -52,6 +50,7 @@ async function main() {
           project: { type: "string" },
           session: { type: "string" },
           body: { type: "string" },
+          mode: { type: "string" },
         },
       });
       const body = values.body ?? (await readStdin());
@@ -67,13 +66,40 @@ async function main() {
         signal: values.signal ? Number(values.signal) : 2,
         agent: values.agent ?? (process.env.CLAUDECODE ? "claude-code" : process.env.CODEX_SANDBOX || process.env.CODEX_HOME ? "codex" : undefined),
         project: values.project,
-        session: values.session ?? process.env.CLAUDE_SESSION_ID,
+        session: values.session,
         cwd: process.cwd(),
-        mode: "manual",
+        mode: values.mode === "auto" ? "auto" : "manual",
       });
+      logDecision({ source: values.mode === "auto" ? "inband" : "manual", session: values.session, decision: "write", titles: [`[${values.signal ?? 2}] ${values.title}`], written: [file] });
       console.log(file);
       return;
     }
+
+    case "update": {
+      const { values, positionals } = parseArgs({ args: rest, allowPositionals: true, options: { session: { type: "string" }, body: { type: "string" } } });
+      const body = values.body ?? (await readStdin());
+      if (!positionals[0] || !body.trim()) {
+        console.error("autoblog update <post path> < body.md");
+        process.exit(2);
+      }
+      const file = appendUpdate(cfg, positionals[0], body, values.session);
+      if (!file) {
+        console.error(`autoblog update: no post at ${positionals[0]} (paths are relative to ${cfg.journal})`);
+        process.exit(2);
+      }
+      logDecision({ source: "inband", session: values.session, decision: "update", written: [file] });
+      console.log(file);
+      return;
+    }
+
+    case "skip": {
+      const { values, positionals } = parseArgs({ args: rest, allowPositionals: true, options: { session: { type: "string" } } });
+      logDecision({ source: "inband", session: values.session, project: projectFor(process.cwd()), decision: "skip", reason: positionals.join(" ") });
+      return;
+    }
+
+    case "bar":
+      return console.log(readBar());
 
     case "search": {
       if (!rest.length) return console.error("autoblog search <words...>");
@@ -121,26 +147,22 @@ async function main() {
     }
 
     case "hook": {
-      // Never block or slow the agent: hand off to a detached process and exit.
+      // Stop hook. Returns instantly unless this turn is a reflection checkpoint.
       if (process.env.AUTOBLOG_REVIEWER) return;
-      let ev: any = {};
+      const { values } = parseArgs({ args: rest, options: { agent: { type: "string" } } });
+      const agent = values.agent ?? "claude-code";
+      let ev: HookInput = {};
       try {
         ev = JSON.parse(await readStdin());
       } catch {}
-      if (ev.hook_event_name === "SessionEnd" && ev.transcript_path) {
-        detached(["__session-end", ev.transcript_path]);
+      const prompt = checkpoint(cfg, ev, agent);
+      if (!prompt) return;
+      if (agent === "claude-code") {
+        // Non-error continuation: the agent sees this as hook feedback and takes one more step.
+        console.log(JSON.stringify({ hookSpecificOutput: { hookEventName: "Stop", additionalContext: prompt } }));
       } else {
-        // Stop fires every turn; sweep other idle sessions at most every 10 minutes.
-        const stamp = join(STATE_DIR, "last-nudge");
-        if (existsSync(stamp) && Date.now() - statSync(stamp).mtimeMs < 10 * 60_000) return;
-        writeFileSync(stamp, "");
-        detached(["sweep"]);
+        console.log(JSON.stringify({ decision: "block", reason: prompt }));
       }
-      return;
-    }
-
-    case "__session-end": {
-      await sweep(cfg, { only: rest });
       return;
     }
 

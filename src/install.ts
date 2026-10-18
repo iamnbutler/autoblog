@@ -11,7 +11,24 @@ const SKILL_TARGETS = [".claude/skills", ".agents/skills", ".codex/skills"].map(
 const CLAUDE_SETTINGS = join(HOME, ".claude", "settings.json");
 const PLIST_LABEL = "com.autoblog.sweep";
 const PLIST = join(HOME, "Library", "LaunchAgents", `${PLIST_LABEL}.plist`);
+const CODEX_HOOKS = join(HOME, ".codex", "hooks.json");
 const HOOK_MARK = "autoblog hook";
+const CLI = join(HOME, ".local", "bin", "autoblog");
+
+/** Add (or with `remove`, strip) our Stop hook in a Claude Code / Codex style hooks object. */
+function wireHooks(file: string, command: string, remove = false) {
+  const s = existsSync(file) ? JSON.parse(readFileSync(file, "utf8")) : {};
+  s.hooks ??= {};
+  for (const event of ["Stop", "SessionEnd"]) {
+    const groups: any[] = (s.hooks[event] ?? []).filter((g: any) => !g.hooks?.some((h: any) => String(h.command).includes(HOOK_MARK)));
+    if (!remove && event === "Stop") groups.push({ hooks: [{ type: "command", command, timeout: 10 }] });
+    if (groups.length) s.hooks[event] = groups;
+    else delete s.hooks[event];
+  }
+  if (!Object.keys(s.hooks).length) delete s.hooks;
+  mkdirSync(dirname(file), { recursive: true });
+  writeFileSync(file, JSON.stringify(s, null, 2) + "\n");
+}
 
 function link(target: string, path: string) {
   mkdirSync(dirname(path), { recursive: true });
@@ -39,27 +56,22 @@ export function install(opts: { journalRepo?: string; noLaunchd?: boolean; noHoo
   say(`journal     ${cfg.journal}`);
 
   // 2. CLI on PATH
-  link(BIN, join(HOME, ".local", "bin", "autoblog"));
+  link(BIN, CLI);
   say(`cli         ~/.local/bin/autoblog -> ${BIN}`);
 
   // 3. Skill for every harness that reads SKILL.md
   for (const t of SKILL_TARGETS) link(SKILL, t);
   say(`skill       ${SKILL_TARGETS.map((t) => t.replace(HOME, "~")).join(", ")}`);
 
-  // 4. Claude Code hooks: SessionEnd reviews the finished session now; Stop nudges a sweep of other idle ones.
+  // 4. In-band reflection: a Stop hook in each harness asks the working agent to reflect at checkpoints.
   if (!opts.noHooks) {
-    const s = existsSync(CLAUDE_SETTINGS) ? JSON.parse(readFileSync(CLAUDE_SETTINGS, "utf8")) : {};
-    s.hooks ??= {};
-    for (const event of ["SessionEnd", "Stop"]) {
-      const groups: any[] = (s.hooks[event] ??= []);
-      const has = groups.some((g) => g.hooks?.some((h: any) => String(h.command).includes(HOOK_MARK)));
-      if (!has) groups.push({ hooks: [{ type: "command", command: `${join(HOME, ".local", "bin", "autoblog")} hook`, timeout: 10 }] });
-    }
-    writeFileSync(CLAUDE_SETTINGS, JSON.stringify(s, null, 2) + "\n");
-    say(`hooks       ${CLAUDE_SETTINGS.replace(HOME, "~")} (SessionEnd, Stop)`);
+    wireHooks(CLAUDE_SETTINGS, `${CLI} hook`);
+    say(`hooks       ${CLAUDE_SETTINGS.replace(HOME, "~")} (Stop)`);
+    wireHooks(CODEX_HOOKS, `${CLI} hook --agent codex`);
+    say(`hooks       ${CODEX_HOOKS.replace(HOME, "~")} (Stop; approve it once with /hooks in Codex)`);
   }
 
-  // 5. launchd: periodic sweep catches every agent (Codex, Claude sessions that never "end").
+  // 5. launchd: fallback sweep for transcripts no in-band hook has claimed.
   if (!opts.noLaunchd && process.platform === "darwin") {
     const bun = process.execPath;
     const path = [dirname(bun), join(HOME, ".local", "bin"), "/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin"].join(":");
@@ -88,17 +100,8 @@ export function install(opts: { journalRepo?: string; noLaunchd?: boolean; noHoo
 }
 
 export function uninstall() {
-  for (const t of [...SKILL_TARGETS, join(HOME, ".local", "bin", "autoblog")]) rmSync(t, { force: true, recursive: true });
-  if (existsSync(CLAUDE_SETTINGS)) {
-    const s = JSON.parse(readFileSync(CLAUDE_SETTINGS, "utf8"));
-    for (const event of ["SessionEnd", "Stop"]) {
-      if (!s.hooks?.[event]) continue;
-      s.hooks[event] = s.hooks[event].filter((g: any) => !g.hooks?.some((h: any) => String(h.command).includes(HOOK_MARK)));
-      if (!s.hooks[event].length) delete s.hooks[event];
-    }
-    if (s.hooks && !Object.keys(s.hooks).length) delete s.hooks;
-    writeFileSync(CLAUDE_SETTINGS, JSON.stringify(s, null, 2) + "\n");
-  }
+  for (const t of [...SKILL_TARGETS, CLI]) rmSync(t, { force: true, recursive: true });
+  for (const f of [CLAUDE_SETTINGS, CODEX_HOOKS]) if (existsSync(f)) wireHooks(f, "", true);
   if (existsSync(PLIST)) {
     spawnSync("launchctl", ["bootout", `gui/${process.getuid!()}`, PLIST], { stdio: "ignore" });
     rmSync(PLIST);
