@@ -56,7 +56,7 @@ git clone https://github.com/iamnbutler/autoblog ~/code/autoblog
 ~/code/autoblog/bin/autoblog init
 ```
 
-`init` creates your private `<you>/<you>-autoblog` repo if it doesn't exist, clones it to `~/code/<you>-autoblog`, and scaffolds it as an Obsidian vault. Then it runs `install`, which links `~/.local/bin/autoblog`, links the skill into each harness, adds the `Stop` hooks for Claude Code and Codex, and loads the launchd fallback. Both commands are idempotent. Override with `--name`, `--repo owner/name`, or `--dir`. The fallback only reviews transcripts from the last `lookbackHours` (24); it doesn't backfill everything. `autoblog uninstall` reverses everything except the vault and `~/.autoblog`.
+`init` creates your private `<you>/<you>-autoblog` repo if it doesn't exist, clones it to `~/code/<you>-autoblog`, and scaffolds it as an Obsidian vault. Then it runs `install`, which links `~/.local/bin/autoblog`, links the skill into each harness, adds the `Stop` hooks for Claude Code and Codex, and loads the launchd fallback. Both commands are idempotent. Override with `--name`, `--repo owner/name`, or `--dir`, and set whose journal it is with `--owner <first name>` (the prompts use it). The fallback only reviews transcripts from the last `lookbackHours` (24); it doesn't backfill everything. `autoblog uninstall` reverses everything except the vault and `~/.autoblog`.
 
 ## CLI
 
