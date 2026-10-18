@@ -12,6 +12,7 @@ autoblog init [--owner name] [--repo owner/name] [--dir path]
 autoblog install         autoblog uninstall
 autoblog sweep [--dry-run -v]             autoblog review <transcript.jsonl> [--dry-run]
 autoblog timeline [--from <transcripts...>]                autoblog link [--due]
+autoblog annotations [apply] [--all] [--dry-run]
 autoblog backfill [--since DATE] [--until DATE] [--project name] [--from dir] [--plan | --resume run] [--dry-run]
 autoblog archive "<why>" autoblog reindex autoblog sync    autoblog transcript <path.jsonl>
 autoblog site setup | deploy | build | open | password

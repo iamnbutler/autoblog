@@ -93,6 +93,16 @@ function entryRow(e: Note) {
   return `<li><a href="${e.url}">${esc(e.title)}</a><span class="row-meta">${m.type} · ${esc(m.projects.join(", "))} · ${m.updated.slice(0, 10)}</span></li>`;
 }
 
+/** Where the owner leaves notes for agents to fold into this page (see site/worker.js). */
+function annotate(n: Note) {
+  return `<section class="annotations" data-page="${esc(`${n.kind}/${n.name}`)}" data-title="${esc(n.title)}">
+<h2>Annotations</h2>
+<ul></ul>
+<form><textarea name="text" rows="3" placeholder="Add context or a correction. An agent will fold it into this page."></textarea><button type="submit">Annotate</button></form>
+</section>
+<script>${ANNOTATE_JS}</script>`;
+}
+
 function page(title: string, main: string, opts: { siteName: string; depth?: string } = { siteName: "autoblog" }) {
   return `<!doctype html>
 <html lang="en">
@@ -157,6 +167,7 @@ ${render(e.body)}
 </article>
 <aside class="links">
 <section><h2>Linked from</h2>${refs.length ? `<ul>${refs.map((r) => `<li><a href="${r.url}">${esc(r.title)}</a> <span class="row-meta">${r.kind}</span></li>`).join("")}</ul>` : `<p class="empty">Nothing links here yet.</p>`}</section>
+${annotate(e)}
 </aside>`,
         { siteName },
       ),
@@ -180,7 +191,7 @@ ${(() => {
   const ls = linesAbout(pr).slice(0, 30);
   return ls.length ? `<section class="list"><h2>Timeline</h2>${render(ls.map(({ day, line }) => `- ${day} · ${line.replace(/^- \[\[[^\]]+\]\]:\s*/, "")}`).join("\n"))}</section>` : "";
 })()}
-${refs.length ? `<aside class="links"><section><h2>Also linked from</h2><ul>${refs.map((r) => `<li><a href="${r.url}">${esc(r.title)}</a></li>`).join("")}</ul></section></aside>` : ""}`,
+<aside class="links">${refs.length ? `<section><h2>Also linked from</h2><ul>${refs.map((r) => `<li><a href="${r.url}">${esc(r.title)}</a></li>`).join("")}</ul></section>` : ""}${annotate(pr)}</aside>`,
         { siteName },
       ),
     );
@@ -262,6 +273,34 @@ q.addEventListener("input", async () => {
 });
 `;
 
+const ANNOTATE_JS = `
+(() => {
+  const box = document.currentScript.previousElementSibling, list = box.querySelector("ul"), form = box.querySelector("form");
+  const esc = (s) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+  const label = { open: "waiting for an agent", applied: "folded in", skipped: "not applied" };
+  const show = (a) => {
+    const li = document.createElement("li");
+    li.innerHTML = '<p>' + esc(a.text).replace(/\\n/g, "<br>") + '</p><span class="row-meta">' + a.at.slice(0, 10) + ' · ' + (label[a.status] || a.status) + (a.reply ? ' · ' + esc(a.reply) : '') + (a.status === "open" ? ' · <a href="#" data-id="' + a.id + '">delete</a>' : '') + '</span>';
+    list.append(li);
+  };
+  list.addEventListener("click", async (e) => {
+    const id = e.target.dataset?.id;
+    if (!id) return;
+    e.preventDefault();
+    const r = await fetch("/_annotations/" + id, { method: "DELETE", headers: { "Content-Type": "application/json" } });
+    if (r.ok) e.target.closest("li").remove();
+  });
+  fetch("/_annotations?page=" + encodeURIComponent(box.dataset.page)).then((r) => (r.ok ? r.json() : [])).then((as) => as.forEach(show)).catch(() => {});
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const text = form.text.value.trim();
+    if (!text) return;
+    const r = await fetch("/_annotations", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ page: box.dataset.page, title: box.dataset.title, text }) });
+    if (r.ok) { show(await r.json()); form.reset(); } else alert("Couldn't save the annotation: " + (await r.text()));
+  });
+})();
+`;
+
 const CSS = `:root {
   --bg: #fbfaf7; --fg: #1d1c1a; --muted: #6b675f; --line: #e6e2d9; --accent: #9a4a1c; --code-bg: #f1eee7; --missing: #a8a294;
   --serif: "Iowan Old Style", "Palatino Linotype", Palatino, Charter, Georgia, serif;
@@ -312,5 +351,10 @@ aside a { text-decoration: none; }
 .empty { color: var(--muted); font-size: 15px; }
 #q { width: 100%; font-size: 16px; padding: 0.7rem 0.9rem; border: 1px solid var(--line); border-radius: 8px; background: transparent; color: var(--fg); margin: 1rem 0 0.5rem; }
 #q:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+.annotations li p { margin: 0; white-space: pre-wrap; }
+.annotations form { margin-top: 0.8rem; }
+.annotations textarea { width: 100%; font: 15px/1.5 var(--sans); padding: 0.6rem 0.8rem; border: 1px solid var(--line); border-radius: 8px; background: transparent; color: var(--fg); resize: vertical; }
+.annotations textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+.annotations button { margin-top: 0.4rem; font: 600 14px var(--sans); padding: 0.45rem 0.9rem; border: 0; border-radius: 6px; background: var(--accent); color: var(--bg); cursor: pointer; }
 @media (max-width: 600px) { body { font-size: 17px; } h1 { font-size: 1.7rem; } }
 `;

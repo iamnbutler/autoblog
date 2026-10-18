@@ -24,7 +24,7 @@ Secrets are redacted on write: GitHub, Anthropic, OpenAI, Slack, AWS and Google 
 
 GitHub Pages sites are public unless you're on Enterprise Cloud, so `autoblog site setup` deploys the vault to a **Cloudflare Worker behind HTTP basic auth** (`site/worker.js`). It fails closed: with no password set, nothing is served. The password goes into the Worker's secrets and your macOS Keychain (`autoblog site password`).
 
-The site keeps Obsidian's semantics: wikilinks (with `|alias` and `#heading`), backlinks, project and tag pages, callouts, a timeline page, and search. After setup, every journal commit redeploys.
+The site keeps Obsidian's semantics: wikilinks (with `|alias` and `#heading`), backlinks, project and tag pages, callouts, a timeline page, search, and an annotation box on every page (see [annotations](how-it-works.md#annotations)). After setup, every journal commit redeploys.
 
 ```bash
 autoblog site setup [--worker name] [--user name] [--rotate]   # once

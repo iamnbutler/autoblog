@@ -39,7 +39,7 @@ export type Config = {
   /** Push the journal after each write. */
   push: boolean;
   /** Private site (Cloudflare Worker behind basic auth), set by `autoblog site setup`. Redeployed after each write. */
-  site?: { worker: string; user: string; url?: string };
+  site?: { worker: string; user: string; url?: string; kv?: string };
 };
 
 export const DEFAULTS: Config = {

@@ -9,6 +9,7 @@ import { linkAfterWrite, linkDue, linkNamed } from "./link";
 import { dayLines, timelineDir, timelinePass } from "./timeline";
 import { checkpoint, type HookInput } from "./inband";
 import { backfill } from "./backfill";
+import { applyAnnotations, listAnnotations } from "./annotations";
 import { readDelta } from "./transcripts";
 import { init, install, uninstall } from "./install";
 import { build, deploy, password, setup, siteUrl } from "./deploy";
@@ -26,6 +27,8 @@ Usage
   autoblog search <words...>        grep notes and posts (check before writing a new topic)
   autoblog timeline [-n days] [--from <transcript.jsonl...>] [--dry-run]
                                     the work log: recent days, or log given transcripts (a backfill)
+  autoblog annotations [apply] [--all] [--dry-run]
+                                    notes left on the site's pages; apply folds open ones in (the sweep does too)
   autoblog link [name...] [--due] [--dry-run]
                                     add [[links]] between entries (runs after every write, and daily)
   autoblog project [name] [--summary "..."]
@@ -215,8 +218,18 @@ async function main() {
       const { values } = parseArgs({ args: rest, options: { "dry-run": { type: "boolean" }, verbose: { type: "boolean", short: "v" } } });
       await sweep(cfg, { dryRun: values["dry-run"], verbose: values.verbose || values["dry-run"] });
       timelinePass(cfg, { dryRun: values["dry-run"], verbose: values.verbose || values["dry-run"] });
+      await applyAnnotations(cfg, { dryRun: values["dry-run"], verbose: values.verbose || values["dry-run"] });
       // Once a day, older entries pick up links to whatever was written since.
       linkDue(cfg, { daily: true, dryRun: values["dry-run"] });
+      return;
+    }
+
+    case "annotations": {
+      const { values, positionals } = parseArgs({ args: rest, allowPositionals: true, options: { all: { type: "boolean" }, "dry-run": { type: "boolean" } } });
+      if (positionals[0] === "apply") return applyAnnotations(cfg, { settleMinutes: 0, dryRun: values["dry-run"], verbose: true });
+      const as = await listAnnotations(cfg, values.all ? undefined : "open");
+      if (!as.length) return console.log(values.all ? "no annotations" : "no open annotations");
+      for (const a of as) console.log(`${a.at.slice(0, 10)}  ${a.page}  [${a.status}]  ${a.id}\n  ${a.text.replace(/\n/g, "\n  ")}${a.reply ? `\n  -> ${a.reply}` : ""}`);
       return;
     }
 

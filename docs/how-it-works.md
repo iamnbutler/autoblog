@@ -33,6 +33,12 @@ Writers don't add `[[links]]`. After every write, a background `autoblog link` a
 
 `timeline/YYYY-MM-DD.md` holds one line per thing done that day, in any project. On each sweep, a fast model (`timelineModel`, default `haiku`) reads each idle session's new activity, day by day, and adds what isn't logged yet. `autoblog timeline --from <transcripts…>` logs old sessions.
 
+## Annotations
+
+Every page on the site has an annotation box. Leave context or a correction there ("this was my design challenge for joining GitHub Next"), and the sweep has an agent fold it into the entry or the project description, in the page's own voice. Annotations from you override the rule against extending posts, but each change stays as small as the annotation. The page shows whether each one was folded in or skipped, and why.
+
+Annotations live in a KV namespace bound to the site's Worker, created on the first deploy. The sweep waits until a page's newest annotation is 10 minutes old, so several in a row land together. `autoblog annotations` lists open ones, and `autoblog annotations apply` applies them now.
+
 ## Several machines
 
 Every machine writes the same vault. Each commit runs `autoblog sync` in the background: fetch, merge (this machine's side wins on conflicting lines), rebuild generated files, push.

@@ -40,6 +40,7 @@ function writeWranglerConfig(cfg: Config) {
         workers_dev: true,
         assets: { directory: DIST, binding: "ASSETS", run_worker_first: true, html_handling: "auto-trailing-slash", not_found_handling: "404-page" },
         vars: { AUTOBLOG_USER: site.user },
+        ...(site.kv ? { kv_namespaces: [{ binding: "ANNOTATIONS", id: site.kv }] } : {}),
       },
       null,
       2,
@@ -70,6 +71,7 @@ export function deploy(cfg: Config, quiet = false): boolean {
     do {
       rmSync(DIRTY, { force: true });
       writeWranglerConfig(cfg);
+      ensureAnnotationStore(cfg);
       const stats = build(cfg);
       const r = wrangler(["deploy"]);
       if (r.status !== 0) {
@@ -83,6 +85,21 @@ export function deploy(cfg: Config, quiet = false): boolean {
   } finally {
     rmSync(LOCK, { force: true });
   }
+}
+
+/** The KV namespace annotations live in, created on the first deploy that lacks one. */
+function ensureAnnotationStore(cfg: Config) {
+  if (cfg.site!.kv) return;
+  const r = wrangler(["kv", "namespace", "create", `${cfg.site!.worker}-annotations`]);
+  const id = (r.stdout + r.stderr).match(/"?id"?\s*[:=]\s*"([0-9a-f]{32})"/)?.[1];
+  if (!id) {
+    console.error(`autoblog site: couldn't create the annotations store; deploying without it\n${r.stderr || r.stdout}`.slice(0, 2000));
+    return;
+  }
+  const raw = JSON.parse(readFileSync(CONFIG_PATH, "utf8"));
+  writeFileSync(CONFIG_PATH, JSON.stringify({ ...raw, site: { ...raw.site, kv: id } }, null, 2) + "\n");
+  cfg.site!.kv = id;
+  writeWranglerConfig(cfg);
 }
 
 export function siteUrl(cfg: Config): string {
