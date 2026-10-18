@@ -209,7 +209,7 @@ export function reviseEntry(cfg: Config, ref: string, r: Revision): string | nul
 
 /** Point every [[Old name]] in the vault at the new name. */
 function relink(cfg: Config, from: string, to: string) {
-  const re = new RegExp(`\\[\\[${from.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?=[\\]|#])`, "gi");
+  const re = new RegExp(`\\[\\[${from.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?=[\\]|#])`, "g");
   for (const f of vaultFiles(cfg)) {
     const t = readFileSync(f, "utf8");
     const n = t.replace(re, `[[${to}`);
