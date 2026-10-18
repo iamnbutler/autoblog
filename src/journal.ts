@@ -322,11 +322,37 @@ export function commit(cfg: Config, message: string, opts: { link?: string } = {
   git(cfg, "add", "-A");
   git(cfg, "commit", "-q", "-m", message);
   if (cfg.push) {
-    // Detached so agents never wait on the network; the next push catches up after a failure.
-    spawn("git", ["-C", cfg.journal, "push", "-q", "-u", "origin", "HEAD"], { detached: true, stdio: "ignore" }).unref();
+    // Detached so agents never wait on the network; the next sync catches up after a failure.
+    spawn(process.execPath, [join(import.meta.dir, "cli.ts"), "sync"], { detached: true, stdio: "ignore" }).unref();
   }
   const job = opts.link ? ["link", opts.link, "--after-write"] : cfg.site ? ["site", "deploy", "--quiet"] : null;
   if (job) spawn(process.execPath, [join(import.meta.dir, "cli.ts"), ...job], { detached: true, stdio: "ignore" }).unref();
+}
+
+/**
+ * Merge what other machines pushed, then push. Several machines write to one vault, so a
+ * plain push gets rejected as soon as they diverge. Generated files are rebuilt after the
+ * merge; where both sides changed the same lines of an entry, this machine's side wins.
+ */
+export function sync(cfg: Config): { merged: number; pushed: boolean } {
+  return withLock(cfg, () => {
+    if (git(cfg, "fetch", "-q", "origin").status !== 0) return { merged: 0, pushed: false };
+    const upstream = git(cfg, "rev-parse", "--abbrev-ref", "@{u}").stdout.trim() || "origin/main";
+    const merged = Number(git(cfg, "rev-list", "--count", `HEAD..${upstream}`).stdout.trim()) || 0;
+    if (merged) {
+      const m = git(cfg, "merge", "-q", "--no-edit", "-X", "ours", upstream);
+      if (m.status !== 0) {
+        git(cfg, "merge", "--abort");
+        console.error(`autoblog: sync: merge failed: ${(m.stderr || m.stdout).slice(0, 500)}`);
+        return { merged: 0, pushed: false };
+      }
+      regenerate(cfg);
+      git(cfg, "add", "-A");
+      git(cfg, "commit", "-q", "-m", "reindex after merge");
+    }
+    const pushed = git(cfg, "push", "-q", "-u", "origin", "HEAD").status === 0;
+    return { merged, pushed };
+  });
 }
 
 function walk(d: string): string[] {

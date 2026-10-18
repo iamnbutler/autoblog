@@ -3,7 +3,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
 import { LOG_PATH, loadConfig, REPO_ROOT } from "./config";
-import { archiveAll, commitLocked, ensureJournal, ensureProjectNote, findEntry, listEntries, projectFor, projectSummary, reviseEntry, TYPES, writeEntry, type EntryType } from "./journal";
+import { archiveAll, commitLocked, ensureJournal, ensureProjectNote, findEntry, listEntries, projectFor, projectSummary, reviseEntry, sync, TYPES, writeEntry, type EntryType } from "./journal";
 import { logDecision, readBar, sweep } from "./review";
 import { linkAfterWrite, linkDue, linkNamed } from "./link";
 import { dayLines, timelineDir, timelinePass } from "./timeline";
@@ -336,6 +336,14 @@ async function main() {
       if (!rest.length) return console.error('autoblog archive "<why these are being set aside>"');
       const n = archiveAll(cfg, rest.join(" "));
       return console.log(n ? `archived ${n} entries` : "nothing to archive");
+    }
+
+    case "sync": {
+      // Merge other machines' pushes, then push. Every commit runs this in the background.
+      ensureJournal(cfg);
+      const r = sync(cfg);
+      if (r.merged || !r.pushed) console.error(`autoblog: sync: merged ${r.merged} commit${r.merged === 1 ? "" : "s"}${r.pushed ? ", pushed" : ", push failed"}`);
+      return;
     }
 
     case "reindex":
