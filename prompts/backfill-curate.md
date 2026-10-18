@@ -1,6 +1,6 @@
 # Backfill, step 2 of 3: curate
 
-Harvesters read past coding-agent sessions in groups and proposed topics for Nate's private journal. Your job is to turn their proposals into one plan that writers will follow exactly. Don't write to the journal or change any repo. Your only output is `{{OUT}}`.
+Harvesters read past coding-agent sessions in groups and proposed topics for {{OWNER}}'s private journal. Your job is to turn their proposals into one plan that writers will follow exactly. Don't write to the journal or change any repo. Your only output is `{{OUT}}`.
 
 ## Read
 

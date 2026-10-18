@@ -1,6 +1,6 @@
 # Backfill, step 3 of 3: write your section
 
-You're writing a few entries in Nate's private journal from material that has already been harvested and curated. Take your time: the bar is high, and entries that narrate incidents get archived.
+You're writing a few entries in {{OWNER}}'s private journal from material that has already been harvested and curated. Take your time: the bar is high, and entries that narrate incidents get archived.
 
 ## Read first
 
@@ -30,6 +30,6 @@ BODY
 
 - **Corrections and additions**: `autoblog show` the entry, then `autoblog revise "<title>" --session <ids>` with the full body on stdin, changing only the wrong sentence or adding the one item in its natural place. Leave everything else as it was. Never extend a post.
 - If `write` says the title exists, someone else wrote it: show it, and revise only if your material corrects it or belongs on that exact note.
-- When you're done, reread each entry with `autoblog show` and fix anything you'd be embarrassed for Nate to read.
+- When you're done, reread each entry with `autoblog show` and fix anything you'd be embarrassed for {{OWNER}} to read.
 
 Reply with the titles you wrote, plus any fact you weren't sure of or left out.

@@ -2,10 +2,11 @@ import { createWriteStream, existsSync, mkdirSync, readdirSync, readFileSync, wr
 import { basename, join } from "node:path";
 import { spawn } from "node:child_process";
 import { homedir } from "node:os";
-import { REPO_ROOT, STATE_DIR, type Config } from "./config";
+import { personalize, REPO_ROOT, STATE_DIR, type Config } from "./config";
 import { listEntries, parseFile, projectFor } from "./journal";
 import { discover, readDelta, sourceOf, type Transcript } from "./transcripts";
 import { isOwnSession } from "./review";
+import { conductorSessions, openCodeSessions, promptHistory, transcriptsIn, zedThreads, type Imported } from "./sources";
 import { linkDue } from "./link";
 import { timelinePass } from "./timeline";
 
@@ -22,7 +23,9 @@ const GROUP_CHARS = 1_200_000; // condensed transcript per harvester
 const TOOLS = ["Bash(autoblog:*)", "Bash(git log:*)", "Bash(git show:*)", "Read", "Grep", "Glob", "Write", "Edit"];
 
 type Session = {
-  path: string;
+  origin: string; // "claude", "codex", or an importer's name
+  path?: string; // the transcript, when there is one
+  text?: string; // readable text, for imported sessions
   session: string;
   project: string;
   start: string;
@@ -54,10 +57,34 @@ function stamps(path: string): [string, string] {
   return [at(all[0]), at(all.at(-1))];
 }
 
-export type BackfillOpts = { since?: string; until?: string; project?: string; paths?: string[]; dryRun?: boolean; parallel?: number; timeline?: boolean };
+export type BackfillOpts = {
+  since?: string;
+  until?: string;
+  project?: string;
+  /** Read only these transcripts. */
+  paths?: string[];
+  /** Also read transcripts under these directories (agent homes, copies, thread-history backups). */
+  from?: string[];
+  /** Skip Zed, Conductor, OpenCode and the prompt history. */
+  noApps?: boolean;
+  dryRun?: boolean;
+  /** Stop after curating, so the plan can be read and edited first. */
+  planOnly?: boolean;
+  /** Write from an earlier run's plan (its directory). */
+  resume?: string;
+  parallel?: number;
+  timeline?: boolean;
+};
+
+const IMPORTERS: Record<string, (have: Set<string>) => Imported[]> = {
+  zed: () => zedThreads(),
+  conductor: () => conductorSessions(),
+  opencode: () => openCodeSessions(),
+  prompts: (have) => promptHistory(have),
+};
 
 /** Every old session worth reading: not autoblog's own, not too small, not done before. */
-export function inventory(cfg: Config, opts: BackfillOpts): Session[] {
+export function inventory(cfg: Config, opts: BackfillOpts, work: string): Session[] {
   const archived = (): Transcript[] => {
     const out: Transcript[] = [];
     const walk = (d: string) => {
@@ -71,10 +98,14 @@ export function inventory(cfg: Config, opts: BackfillOpts): Session[] {
     if (cfg.sources.includes("codex")) walk(join(homedir(), ".codex", "archived_sessions"));
     return out;
   };
-  const transcripts = opts.paths?.length ? opts.paths.map((path) => ({ path, source: sourceOf(path), mtimeMs: 0 })) : [...discover(cfg.sources), ...archived()];
+  const transcripts = opts.paths?.length
+    ? opts.paths.map((path) => ({ path, source: sourceOf(path), mtimeMs: 0 }))
+    : [...discover(cfg.sources), ...archived(), ...transcriptsIn(opts.from ?? [], work)];
   const skip = new Set([...citedSessions(cfg), ...loadDone()]);
   const out: Session[] = [];
   const seen = new Set<string>();
+  const keep = (s: Session) =>
+    (!opts.since || !s.end || s.end >= opts.since) && (!opts.until || !s.start || s.start.slice(0, 10) <= opts.until) && (!opts.project || s.project === opts.project);
   for (const t of transcripts) {
     let d;
     try {
@@ -83,15 +114,32 @@ export function inventory(cfg: Config, opts: BackfillOpts): Session[] {
       continue;
     }
     const session = d.session ?? basename(t.path, ".jsonl");
-    if (seen.has(session) || skip.has(session) || isOwnSession(cfg, d)) continue;
+    if (seen.has(session)) continue;
     seen.add(session);
-    if (d.userTurns === 0 || d.toolCalls < cfg.minToolCalls) continue;
+    if (skip.has(session) || isOwnSession(cfg, d) || d.userTurns === 0 || d.toolCalls < cfg.minToolCalls) continue;
     const [start, end] = stamps(t.path);
-    if (opts.since && end && end < opts.since) continue;
-    if (opts.until && start && start.slice(0, 10) > opts.until) continue;
-    const project = projectFor(d.cwd);
-    if (opts.project && project !== opts.project) continue;
-    out.push({ path: t.path, session, project, start, end, userTurns: d.userTurns, toolCalls: d.toolCalls, opener: (d.opener ?? "").replace(/\s+/g, " ").slice(0, 160) });
+    const s: Session = { origin: t.source, path: t.path, session, project: projectFor(d.cwd), start, end, userTurns: d.userTurns, toolCalls: d.toolCalls, opener: (d.opener ?? "").replace(/\s+/g, " ").slice(0, 160) };
+    if (keep(s)) out.push(s);
+  }
+  // Other stores: apps with their own history, and prompts whose transcripts are gone.
+  if (!opts.paths?.length && !opts.noApps) {
+    for (const [name, load] of Object.entries(IMPORTERS)) {
+      let found: Imported[] = [];
+      try {
+        found = load(seen);
+      } catch (e) {
+        console.error(`autoblog: couldn't read ${name} history: ${String(e)}`);
+      }
+      for (const i of found) {
+        if (seen.has(i.session)) continue;
+        seen.add(i.session);
+        if (skip.has(i.session) || isOwnSession(cfg, i) || i.userTurns < 2) continue;
+        // Prompt-only sessions have no tool calls to count; judge them by how much was asked.
+        if (i.origin === "prompts" ? i.userTurns < 4 : i.toolCalls < cfg.minToolCalls && i.userTurns < 4) continue;
+        const s: Session = { ...i };
+        if (keep(s)) out.push(s);
+      }
+    }
   }
   return out.sort((a, b) => a.start.localeCompare(b.start));
 }
@@ -125,8 +173,8 @@ function groups(sessions: (Session & { file: string; chars: number })[]) {
   return out.map((g, i) => ({ ...g, name: `${String(i + 1).padStart(2, "0")}-${g.name.replace(/[^\w.-]+/g, "-")}` }));
 }
 
-function template(name: string, vars: Record<string, string>): string {
-  let s = readFileSync(join(REPO_ROOT, "prompts", name), "utf8");
+function template(cfg: Config, name: string, vars: Record<string, string>): string {
+  let s = personalize(cfg, readFileSync(join(REPO_ROOT, "prompts", name), "utf8"));
   for (const [k, v] of Object.entries(vars)) s = s.replaceAll(`{{${k}}}`, v);
   return s;
 }
@@ -156,26 +204,32 @@ async function pool<T>(items: T[], n: number, fn: (t: T) => Promise<void>) {
 }
 
 export async function backfill(cfg: Config, opts: BackfillOpts) {
-  const sessions = inventory(cfg, opts);
   const say = (m: string) => console.error(m);
+  if (opts.resume) return write(cfg, opts.resume, opts);
+  const dir = join(STATE_DIR, "backfill", new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19));
+  mkdirSync(dir, { recursive: true });
+  const sessions = inventory(cfg, opts, dir);
   if (!sessions.length) return say("autoblog: nothing to backfill");
   const projects = new Map<string, number>();
+  const origins = new Map<string, number>();
   for (const s of sessions) projects.set(s.project, (projects.get(s.project) ?? 0) + 1);
-  say(`${sessions.length} sessions from ${sessions[0].start.slice(0, 10)} to ${sessions.at(-1)!.end.slice(0, 10)}, across ${projects.size} projects:`);
+  for (const s of sessions) origins.set(s.origin, (origins.get(s.origin) ?? 0) + 1);
+  say(`${sessions.length} sessions from ${sessions[0].start.slice(0, 10)} to ${sessions.at(-1)!.end.slice(0, 10)} (${[...origins].map(([o, n]) => `${n} ${o}`).join(", ")}), across ${projects.size} projects:`);
   say([...projects].sort((a, b) => b[1] - a[1]).map(([p, n]) => `  ${p}: ${n}`).join("\n"));
   if (opts.dryRun) return;
 
-  const dir = join(STATE_DIR, "backfill", new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19));
   for (const d of ["sessions", "harvest", "logs"]) mkdirSync(join(dir, d), { recursive: true });
 
   // Readable transcripts, one file per session.
   const files = sessions.map((s, i) => {
-    const d = readDelta(s.path, 0, Number.MAX_SAFE_INTEGER, { full: true });
+    const d = s.path ? readDelta(s.path, 0, Number.MAX_SAFE_INTEGER, { full: true }) : null;
     const file = join(dir, "sessions", `${String(i + 1).padStart(4, "0")}.md`);
-    const text = `# ${s.project}, session ${s.session}, ${s.start} to ${s.end} (${s.userTurns} user turns, ${s.toolCalls} tool calls)\nTranscript: ${s.path}\nWorking directory: ${d.cwd ?? "?"}\n\n${d.text}\n`;
+    const where = s.path ? `Transcript: ${s.path}\nWorking directory: ${d?.cwd ?? "?"}` : `From: ${s.origin}`;
+    const text = `# ${s.project}, session ${s.session}, ${s.start} to ${s.end} (${s.userTurns} user turns, ${s.toolCalls} tool calls)\n${where}\n\n${s.text ?? d?.text ?? ""}\n`;
     writeFileSync(file, text);
     return { ...s, file, chars: text.length };
   });
+  writeFileSync(join(dir, "sessions.json"), JSON.stringify(sessions.map(({ text, ...s }) => s), null, 2));
   const plan = groups(files);
   say(`${plan.length} harvest groups in ${dir}`);
 
@@ -188,7 +242,7 @@ export async function backfill(cfg: Config, opts: BackfillOpts) {
     const group = `${g.sessions.length} sessions, ${g.sessions[0].start.slice(0, 10)} to ${g.sessions.at(-1)!.end.slice(0, 10)}, from ${projects.join(", ")}.`;
     const out = join(dir, "harvest", `${g.name}.md`);
     say(`harvest ${g.name} (${g.sessions.length} sessions)`);
-    const ok = await runAgent(cfg, template("backfill-harvest.md", { GROUP: group, INDEX: index, OUT: out }), dir, join(dir, "logs", `harvest-${g.name}.log`));
+    const ok = await runAgent(cfg, template(cfg, "backfill-harvest.md", { GROUP: group, INDEX: index, OUT: out }), dir, join(dir, "logs", `harvest-${g.name}.log`));
     if (!ok || !existsSync(out)) say(`  harvest ${g.name} failed; see logs/harvest-${g.name}.log`);
   });
   const harvests = plan.map((g) => join(dir, "harvest", `${g.name}.md`)).filter(existsSync);
@@ -197,15 +251,30 @@ export async function backfill(cfg: Config, opts: BackfillOpts) {
   // 2. Curate into one plan, split into sections.
   const curated = join(dir, "curated.md");
   say("curate");
-  await runAgent(cfg, template("backfill-curate.md", { HARVESTS: harvests.map((h) => `\`${h}\``).join(", "), OUT: curated }), dir, join(dir, "logs", "curate.log"));
+  await runAgent(cfg, template(cfg, "backfill-curate.md", { HARVESTS: harvests.map((h) => `\`${h}\``).join(", "), OUT: curated }), dir, join(dir, "logs", "curate.log"));
   if (!existsSync(curated)) return say(`autoblog: curation failed; see ${join(dir, "logs", "curate.log")}`);
+  if (opts.planOnly) {
+    say(`The plan is ${curated}. Read it, edit or delete items, then write it with:\n  autoblog backfill --resume ${dir}`);
+    return;
+  }
+  await write(cfg, dir, opts);
+}
+
+/** Step 3 onward: write the plan's sections, then mark the sessions done, log and link. */
+async function write(cfg: Config, dir: string, opts: BackfillOpts) {
+  const say = (m: string) => console.error(m);
+  const curated = join(dir, "curated.md");
+  if (!existsSync(curated)) return say(`autoblog: no plan at ${curated}`);
+  const sessions: Session[] = JSON.parse(readFileSync(join(dir, "sessions.json"), "utf8"));
+  const parallel = opts.parallel ?? 4;
+  mkdirSync(join(dir, "logs"), { recursive: true });
   const sections = [...readFileSync(curated, "utf8").matchAll(/^## (.+)$/gm)].map((m) => m[1].trim()).filter((s) => !/^rejected/i.test(s));
 
   // 3. Write each section, in parallel.
   await pool(sections, parallel, async (section) => {
     say(`write ${section}`);
     const slug = section.replace(/[^\w]+/g, "-").slice(0, 40);
-    const ok = await runAgent(cfg, template("backfill-write.md", { CURATED: curated, SECTION: section, DIR: join(dir, "harvest") }), dir, join(dir, "logs", `write-${slug}.log`));
+    const ok = await runAgent(cfg, template(cfg, "backfill-write.md", { CURATED: curated, SECTION: section, DIR: join(dir, "harvest") }), dir, join(dir, "logs", `write-${slug}.log`));
     if (!ok) say(`  write ${section} failed; see logs/write-${slug}.log`);
   });
 
@@ -215,7 +284,8 @@ export async function backfill(cfg: Config, opts: BackfillOpts) {
   saveDone(done);
   if (opts.timeline !== false) {
     say("timeline");
-    timelinePass(cfg, { only: sessions.map((s) => s.path) });
+    // The timeline reads transcripts day by day; imported sessions have no transcript to split.
+    timelinePass(cfg, { only: sessions.flatMap((s) => (s.path ? [s.path] : [])) });
   }
   say("link");
   linkDue(cfg);

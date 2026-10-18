@@ -12,6 +12,8 @@ export const LOCK_PATH = join(STATE_DIR, "sweep.lock");
 export const REPO_ROOT = join(import.meta.dir, "..");
 
 export type Config = {
+  /** Whose journal this is, by first name. Prompts say "{owner}'s journal". */
+  owner: string;
   /** Local clone of the private journal repo. */
   journal: string;
   /** Model used by the auto-mode reviewer (any `claude --model` value). */
@@ -41,6 +43,7 @@ export type Config = {
 };
 
 export const DEFAULTS: Config = {
+  owner: defaultOwner(),
   journal: join(HOME, "code", "autoblog"), // replaced by `autoblog init` with ~/code/<you>-autoblog
   model: "opus",
   linkModel: "sonnet",
@@ -54,6 +57,19 @@ export const DEFAULTS: Config = {
   sources: ["claude", "codex"],
   push: true,
 };
+
+/** First name from git config, or a neutral stand-in. */
+function defaultOwner(): string {
+  try {
+    const name = require("node:child_process").spawnSync("git", ["config", "--global", "user.name"], { encoding: "utf8" }).stdout.trim();
+    return name.split(/\s+/)[0] || "the user";
+  } catch {
+    return "the user";
+  }
+}
+
+/** Fill the owner's name into a prompt. */
+export const personalize = (cfg: Config, s: string) => s.replaceAll("{{OWNER}}", cfg.owner);
 
 export function loadConfig(): Config {
   let user: Partial<Config> = {};

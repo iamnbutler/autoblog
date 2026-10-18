@@ -49,7 +49,7 @@ const SCHEMA = {
       items: {
         type: "object",
         properties: {
-          thing: { type: "string", description: 'The project or effort, as Nate would name it: "Next Cloud", "Next Cloud for Mac", "Ramble", "autoblog", "Taxes".' },
+          thing: { type: "string", description: 'The project or effort, as the owner would name it: "Next Cloud", "Next Cloud for Mac", "Ramble", "autoblog", "Taxes".' },
           isProject: { type: "boolean", description: "True when the thing is the session's own project." },
           text: { type: "string", description: "10 to 30 words, past tense: what changed, with the key detail." },
         },
@@ -60,9 +60,9 @@ const SCHEMA = {
   required: ["lines"],
 };
 
-const SYSTEM = `You keep Nate's work log: one line per thing done, across all his projects, one file per day. You get a condensed slice of one coding-agent session from one day, and the lines already logged for that day.
+const system = (cfg: Config) => `You keep ${cfg.owner}'s work log: one line per thing done, across all their projects, one file per day. You get a condensed slice of one coding-agent session from one day, and the lines already logged for that day.
 
-Return a line for each thing this slice actually got done, up to 12 (a long session can do many things; a quiet one, none): something built, fixed, shipped, released, deployed, set up, decided, or found out. Each line names the thing and says what happened in 10 to 30 words: the headline, plus the one detail that makes it findable later ("Added canvas posts: paste images and arrange them, saved per post"; "Shipped 0.1.0 with Sparkle updates, signed and notarized"). Write it the way Nate would jot it down, not as a report. It should make sense to someone reading the log months later with no other context: say what the thing does for the person using it, not how the work was organized. Leave out test counts, file names, and where things are stored unless that's the point.
+Return a line for each thing this slice actually got done, up to 12 (a long session can do many things; a quiet one, none): something built, fixed, shipped, released, deployed, set up, decided, or found out. Each line names the thing and says what happened in 10 to 30 words: the headline, plus the one detail that makes it findable later ("Added canvas posts: paste images and arrange them, saved per post"; "Shipped 0.1.0 with Sparkle updates, signed and notarized"). Write it the way ${cfg.owner} would jot it down, not as a report. It should make sense to someone reading the log months later with no other context: say what the thing does for the person using it, not how the work was organized. Leave out test counts, file names, and where things are stored unless that's the point.
 
 Good: "Added Post and Save as Draft to the editor: uploads local media, swaps in the URLs, then creates or updates the post with your gh token. ⌘↩ posts, ⇧⌘↩ saves a draft."
 Bad: "Merged #57 so agents can pick folders in Open and Save panels, then #64 after a rebase; cut the 0.5.0 release PR #65." Better: "Agents can now pick folders in Open and Save panels; released 0.5.0, signed and notarized."
@@ -80,7 +80,7 @@ Bad: "Replaced the scattered live-check issue #42 with #129: 14 checks plus 2 un
 function askModel(cfg: Config, input: string): { thing: string; isProject: boolean; text: string }[] | null {
   const r = spawnSync(
     "claude",
-    ["-p", "--model", cfg.timelineModel, "--output-format", "json", "--no-session-persistence", "--tools", "", "--system-prompt", SYSTEM, "--json-schema", JSON.stringify(SCHEMA)],
+    ["-p", "--model", cfg.timelineModel, "--output-format", "json", "--no-session-persistence", "--tools", "", "--system-prompt", system(cfg), "--json-schema", JSON.stringify(SCHEMA)],
     { input, encoding: "utf8", cwd: STATE_DIR, env: { ...process.env, AUTOBLOG_REVIEWER: "1" }, maxBuffer: 16 * 1024 * 1024, timeout: 5 * 60_000 },
   );
   if (r.status !== 0) {

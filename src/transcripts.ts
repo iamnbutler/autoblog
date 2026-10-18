@@ -192,7 +192,7 @@ function claudeEntries(rec: any, d: Delta, lim: Limits): string[] {
       if (rec.type === "user") {
         if (/^<(command-|local-command|system-reminder)/.test(c.text.trim())) continue;
         // The summary written at compaction arrives as a user turn; it's the densest record of
-        // what came before, so it gets more room, and it doesn't count as Nate speaking.
+        // what came before, so it gets more room, and it doesn't count as the user speaking.
         if (rec.isCompactSummary) out.push(`SUMMARY: ${clip(c.text.trim(), lim.summary)}`);
         else out.push(`USER: ${clip(c.text.trim(), lim.user)}`);
       } else out.push(`AGENT: ${clip(c.text.trim(), lim.agent)}`);

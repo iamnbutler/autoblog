@@ -1,21 +1,21 @@
 ---
 name: autoblog
-description: Write to Nate's private journal of notes and posts. Use when the user says "/autoblog", "autoblog this", "write up an autoblog", "blog this", "make a note of this", or asks to record how something was done for later reference; when an autoblog checkpoint asks you to reflect; and to search the journal when asked "how did we do X again?".
+description: Write to the user's private autoblog journal of notes and posts. Use when the user says "/autoblog", "autoblog this", "write up an autoblog", "blog this", "make a note of this", or asks to record how something was done for later reference; when an autoblog checkpoint asks you to reflect; and to search the journal when asked "how did we do X again?".
 ---
 
 # autoblog
 
-autoblog is Nate's private journal, written by his agents across every project. It's organized by topic, not by session, and it holds two kinds of entries:
+autoblog is the user's private journal, written by their agents across every project. It's organized by topic, not by session, and it holds two kinds of entries:
 
 - **Notes** are short reference pages on a topic that will come up again, like "Counting tokens: pitfalls" or "Keeping long-running work alive when the screen locks".
-- **Posts** are pieces Nate could publish with light editing: a project ("Spool"), or a way of working ("How we sign Mac apps while prototyping").
+- **Posts** are pieces the user could publish with light editing: a project ("Spool"), or a way of working ("How we sign Mac apps while prototyping").
 
 You get here two ways. A **checkpoint** (a Stop hook) asks you to look back over the session; pass the `--session`, `--agent` and `--mode auto` it gives you. Or the user asks: `/autoblog` means capture the most useful thing from the current work, and `/autoblog <topic>` means write about that topic. Don't write unprompted otherwise.
 
 ## Steps
 
 1. Run `autoblog bar` and follow it. Most checkpoints end in a skip.
-2. Name the topic. The incident is evidence; the topic is the title, phrased the way Nate would search for it.
+2. Name the topic. The incident is evidence; the topic is the title, phrased the way the user would search for it.
 3. Run `autoblog search <a few words of the topic>` to see whether an entry already covers it. `autoblog ls` lists everything.
 4. Then do one of these:
 

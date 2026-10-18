@@ -39,7 +39,7 @@ Usage
   autoblog review <transcript> [--dry-run]
                                     review one transcript, ignoring idle and size gates
   autoblog hook [--agent codex]     Stop hook entrypoint (reads hook JSON on stdin)
-  autoblog init [--name n | --repo owner/name] [--dir path] [--no-install]
+  autoblog init [--owner FirstName] [--name n | --repo owner/name] [--dir path] [--no-install]
                                     create/clone the private {name}-autoblog vault, then install
   autoblog install [--no-launchd] [--no-hooks]
                                     (re)wire the CLI, skill, Stop hooks, and fallback sweep
@@ -175,7 +175,7 @@ async function main() {
     }
 
     case "bar":
-      return console.log(readBar());
+      return console.log(readBar(cfg));
 
     case "search": {
       if (!rest.length) return console.error("autoblog search <words...>");
@@ -239,7 +239,7 @@ async function main() {
 
     case "guide": {
       const skill = readFileSync(join(REPO_ROOT, "skill", "autoblog", "SKILL.md"), "utf8");
-      console.log(skill.replace(/^---\n[\s\S]*?\n---\n+/, ""));
+      console.log(skill.replace(/^---\n[\s\S]*?\n---\n+/, "").replaceAll("the user's journal", `${cfg.owner}'s journal`));
       return;
     }
 
@@ -286,6 +286,7 @@ async function main() {
       const { values } = parseArgs({
         args: rest,
         options: {
+          owner: { type: "string" },
           name: { type: "string" },
           repo: { type: "string" },
           dir: { type: "string" },
@@ -294,7 +295,7 @@ async function main() {
           "no-hooks": { type: "boolean" },
         },
       });
-      init({ name: values.name, repo: values.repo, dir: values.dir, noInstall: values["no-install"], noLaunchd: values["no-launchd"], noHooks: values["no-hooks"] });
+      init({ owner: values.owner, name: values.name, repo: values.repo, dir: values.dir, noInstall: values["no-install"], noLaunchd: values["no-launchd"], noHooks: values["no-hooks"] });
       return;
     }
 
@@ -349,6 +350,10 @@ async function main() {
           until: { type: "string" },
           project: { type: "string" },
           parallel: { type: "string" },
+          from: { type: "string", multiple: true },
+          "no-apps": { type: "boolean" },
+          plan: { type: "boolean" },
+          resume: { type: "string" },
           "no-timeline": { type: "boolean" },
           "dry-run": { type: "boolean" },
         },
@@ -359,6 +364,10 @@ async function main() {
         until: values.until,
         project: values.project,
         paths: positionals,
+        from: values.from,
+        noApps: values["no-apps"],
+        planOnly: values.plan,
+        resume: values.resume,
         parallel: values.parallel ? Number(values.parallel) : undefined,
         timeline: !values["no-timeline"],
         dryRun: values["dry-run"],

@@ -4,9 +4,9 @@ Shared by in-band reflection (the agent doing the work), manual writes, and the 
 
 ## Who it's for
 
-Nate, later. He might be starting something similar, hitting the same wall again, or looking for something to turn into a real post. Assume he has forgotten the project and the session.
+{{OWNER}}, later. They might be starting something similar, hitting the same wall again, or looking for something to turn into a real post. Assume they've forgotten the project and the session.
 
-The reference point is his own site, where posts look like "Spool", "Player", "Adding a Favicon in 2024", "Adding Extended Context in GPUI", and "Computer Use For All". They have topic titles, a plain first-person voice, and concrete code, and each one is about a thing he made or a way of doing something. The journal can be rougher than that, but never thinner.
+The reference point is a personal developer site, where posts look like "Spool", "Player", "Adding a Favicon in 2024", "Adding Extended Context in GPUI", and "Computer Use For All". They have topic titles, a plain first-person voice, and concrete code, and each one is about a thing the author made or a way of doing something. The journal can be rougher than that, but never thinner.
 
 The journal holds two kinds of entries. Both are titled by **topic**. Once written, they change only under the narrow rules in "Revising" below.
 
@@ -15,15 +15,15 @@ The journal holds two kinds of entries. Both are titled by **topic**. Once writt
 A note is a reference page on a topic that will come up again. It answers "what do I need to know about X?"
 
 - Good titles: "Counting tokens: pitfalls", "Keeping long-running work alive when the screen locks", "macOS permissions for dev builds", "Signing and notarizing Mac apps in CI".
-- The title is the topic, phrased the way Nate would search for it. It isn't an event, and it isn't a sentence-long lesson.
+- The title is the topic, phrased the way {{OWNER}} would search for it. It isn't an event, and it isn't a sentence-long lesson.
 - The body is short: what to do, what goes wrong, and why. Bullets, code, and commands are welcome. Say where it came from in a line (`[[project]]`); don't tell the story of the session.
 - Don't write a second note on a topic a note already covers. Either it qualifies as a revision (below), or it's nothing.
 
 ## Posts
 
-A post is something Nate could put on his site with light editing. It has one of two shapes:
+A post is something {{OWNER}} could put on their own site with light editing. It has one of two shapes:
 
-- **A project.** What it is, why it exists, and what's interesting about how it works, like "Spool" or "Player". Write it once the project has a shape worth describing. It describes the project as it was then, and it isn't extended as the project changes. The project already has a note under its own name, so give the post a title of its own that says what the project is, like Nate's drafts "Serial by Design" (Tasks) and "Computer Use For All" (Desktop Tools).
+- **A project.** What it is, why it exists, and what's interesting about how it works, like "Spool" or "Player". Write it once the project has a shape worth describing. It describes the project as it was then, and it isn't extended as the project changes. The project already has a note under its own name, so give the post a title of its own that says what the project is, like {{OWNER}}'s drafts "Serial by Design" (Tasks) and "Computer Use For All" (Desktop Tools).
 - **A way of working.** How we do something, refined across sessions and projects, like "How we sign Mac apps while prototyping" or "Designing by exploring several directions at once".
 
 Guidelines:
@@ -39,7 +39,7 @@ Most checkpoints produce nothing. New notes are occasional, new posts are rare, 
 Ask these in order:
 
 1. **Is something in an existing entry now wrong, or does an existing note's topic call for exactly this?** Revise it, within the rules below.
-2. **Is this a topic Nate will hit again, on another project?** Write a new note.
+2. **Is this a topic {{OWNER}} will hit again, on another project?** Write a new note.
 3. **Is this a project, a significant new piece of one, or a way of working that's now worth describing whole?** Write a post.
 
 Skip everything else:

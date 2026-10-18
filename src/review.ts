@@ -1,7 +1,7 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
-import { isWithin, LOCK_PATH, LOG_PATH, REPO_ROOT, STATE_DIR, STATE_PATH, type Config } from "./config";
+import { isWithin, personalize, LOCK_PATH, LOG_PATH, REPO_ROOT, STATE_DIR, STATE_PATH, type Config } from "./config";
 import { discover, readDelta, sourceOf, type Delta } from "./transcripts";
 import { projectFor, writeEntry } from "./journal";
 import { inbandTranscripts } from "./inband";
@@ -27,7 +27,7 @@ const SCHEMA = {
         type: "object",
         properties: {
           type: { type: "string", enum: ["note", "post"] },
-          title: { type: "string", description: "The topic, as Nate would search for it." },
+          title: { type: "string", description: "The topic, as the journal's owner would search for it." },
           tags: { type: "array", items: { type: "string" } },
           body: { type: "string", description: "Markdown body, without the title heading. Link entries with [[wikilinks]]." },
         },
@@ -205,12 +205,12 @@ async function reviewDelta(
   return written;
 }
 
-export function readBar(): string {
-  return readFileSync(join(REPO_ROOT, "prompts", "bar.md"), "utf8");
+export function readBar(cfg: Config): string {
+  return personalize(cfg, readFileSync(join(REPO_ROOT, "prompts", "bar.md"), "utf8"));
 }
 
 function runJudge(cfg: Config, input: string): Judgment | null {
-  const system = readFileSync(join(REPO_ROOT, "prompts", "review.md"), "utf8").replace("{{BAR}}", readBar());
+  const system = personalize(cfg, readFileSync(join(REPO_ROOT, "prompts", "review.md"), "utf8")).replace("{{BAR}}", readBar(cfg));
   const r = spawnSync(
     "claude",
     [

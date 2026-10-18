@@ -1,14 +1,14 @@
 # Backfill, step 1 of 3: harvest topics (read-only)
 
-You're reading past coding-agent sessions to find **topics** for Nate's private journal. Don't write to the journal, and don't change any repo. Your only output is one harvest file, `{{OUT}}`. A curator reads every group's harvest next, and then writers write.
+You're reading past coding-agent sessions to find **topics** for {{OWNER}}'s private journal. Don't write to the journal, and don't change any repo. Your only output is one harvest file, `{{OUT}}`. A curator reads every group's harvest next, and then writers write.
 
 ## The journal
 
 Run `autoblog bar` first. It's short, and it's the most important input. In brief:
 
 - **Notes** are short reference pages on a topic that will come up again: platform behaviors, pitfalls, recipes, tool quirks.
-- **Posts** are rare. Either a **project** (what it is, why it exists, how it works, what's interesting) or a **way of working** (how Nate prototypes, designs, runs agents, releases, tests).
-- Titles name a **topic** Nate would search for. They never narrate an incident.
+- **Posts** are rare. Either a **project** (what it is, why it exists, how it works, what's interesting) or a **way of working** (how {{OWNER}} prototypes, designs, runs agents, releases, tests).
+- Titles name a **topic** {{OWNER}} would search for. They never narrate an incident.
 - Existing entries change only to fix a factual inaccuracy, or for a very closely aligned addition to a note. Posts are never extended.
 
 Run `autoblog ls` to see every entry, and `autoblog show "<name>"` to read any that touch your material. Your job is what those entries **don't** have. Other machines and earlier backfills write to this journal too, so it may already cover a lot.
@@ -46,7 +46,7 @@ Transcripts contain live tokens, keys and passwords. Never copy one. Write `<red
 Write `{{OUT}}` in this shape:
 
 ```
-## <Topic title, as Nate would search for it>
+## <Topic title, as {{OWNER}} would search for it>
 - kind: new | correction to "<entry>" | addition to "<note>"
 - type: note | post
 - projects: <repo names>

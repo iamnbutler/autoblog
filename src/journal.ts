@@ -7,7 +7,7 @@ import { redact } from "./redact";
 /*
  * The journal is an Obsidian vault, whether or not Obsidian ever opens it:
  *   notes/<Topic>.md      short reference pages on a topic, revised in place as we learn more
- *   posts/<Topic>.md      pieces Nate could publish: a project, or a way of working
+ *   posts/<Topic>.md      pieces the owner could publish: a project, or a way of working
  *   projects/<name>.md    hub note per project: what it is, plus every entry that touches it
  *   timeline/<date>.md    the work log: one line per thing done that day, any project
  *   archive/<date>/       earlier entries, set aside; nothing reads them

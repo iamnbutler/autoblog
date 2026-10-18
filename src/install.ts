@@ -50,7 +50,7 @@ const VAULT_GITIGNORE = `# Obsidian per-device state
  * Set up the private journal: <name>/<name>-autoblog on GitHub, cloned locally and
  * scaffolded as an Obsidian vault. Then wire every harness (unless noInstall).
  */
-export function init(opts: { name?: string; repo?: string; dir?: string; noInstall?: boolean; noLaunchd?: boolean; noHooks?: boolean }) {
+export function init(opts: { owner?: string; name?: string; repo?: string; dir?: string; noInstall?: boolean; noLaunchd?: boolean; noHooks?: boolean }) {
   const say = (m: string) => console.log(`  ${m}`);
   const sh = (cmd: string, args: string[]) => spawnSync(cmd, args, { encoding: "utf8" });
 
@@ -75,7 +75,8 @@ export function init(opts: { name?: string; repo?: string; dir?: string; noInsta
 
   mkdirSync(STATE_DIR, { recursive: true });
   const current = existsSync(CONFIG_PATH) ? JSON.parse(readFileSync(CONFIG_PATH, "utf8")) : DEFAULTS;
-  writeFileSync(CONFIG_PATH, JSON.stringify({ ...current, journal: dir }, null, 2) + "\n");
+  const owner = opts.owner ?? current.owner ?? DEFAULTS.owner;
+  writeFileSync(CONFIG_PATH, JSON.stringify({ ...current, owner, journal: dir }, null, 2) + "\n");
   const cfg = loadConfig();
 
   for (const d of ["posts", "projects"]) {
@@ -85,6 +86,7 @@ export function init(opts: { name?: string; repo?: string; dir?: string; noInsta
   if (!existsSync(join(dir, ".gitignore"))) writeFileSync(join(dir, ".gitignore"), VAULT_GITIGNORE);
   commitLocked(cfg, "init vault");
   say(`journal     ${dir} (github.com/${repo})`);
+  say(`owner       ${owner} (prompts say "${owner}'s journal"; change with --owner or in ${CONFIG_PATH})`);
 
   if (!opts.noInstall) install(opts);
 }
