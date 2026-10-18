@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { closeSync, existsSync, openSync, readdirSync, readFileSync, readSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
@@ -60,7 +60,18 @@ function safeReaddir(d: string): string[] {
 }
 
 export function sourceOf(path: string): Source {
-  return path.includes("/.codex/") ? "codex" : "claude";
+  if (path.includes("/.codex/")) return "codex";
+  if (path.includes("/.claude/")) return "claude";
+  // Elsewhere (a backup, a copy), go by the first line: Codex rollouts open with session_meta.
+  try {
+    const fd = openSync(path, "r");
+    const buf = Buffer.alloc(512);
+    const n = readSync(fd, buf, 0, 512, 0);
+    closeSync(fd);
+    return /"type":\s*"session_meta"/.test(buf.toString("utf8", 0, n)) ? "codex" : "claude";
+  } catch {
+    return "claude";
+  }
 }
 
 const clip = (s: string, n: number) => (s.length > n ? `${s.slice(0, n)} …[+${s.length - n}]` : s);
