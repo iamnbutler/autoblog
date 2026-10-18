@@ -4,7 +4,7 @@ An effortless, private engineering journal written by your coding agents, organi
 
 Agents notice when something we did belongs in the journal and write it to a **private** repo. The journal is organized by topic, not by session:
 
-- **Notes** are short reference pages that stay current, like "Counting tokens: pitfalls". A new pitfall revises the note; it doesn't become a new entry.
+- **Notes** are short reference pages, like "Counting tokens: pitfalls".
 - **Posts** are rarer pieces you could publish with light editing: a project, or a way of working ("How we sign Mac apps while prototyping").
 
 This repo is the machinery. The journal lives in a separate private repo.
@@ -27,8 +27,8 @@ This repo is the machinery. The journal lives in a separate private repo.
 The bar is the product, so read [`prompts/bar.md`](prompts/bar.md). In short:
 
 - Most checkpoints write nothing.
-- The most common useful outcome is a revision to an existing note.
-- New notes are occasional, and new posts are rare.
+- New notes are occasional, new posts are rare, and revisions are rarer still.
+- A revision fixes something that's wrong, or adds to a note something that belongs on that exact page. It never extends a post. New work on a project becomes a new note or post, or nothing.
 - Titles name a topic you'd search for, never an incident. "Keeping long-running work alive when the screen locks", not "Sixty PRs shipped overnight against a locked screen were sixty unverified PRs".
 
 ## Wiring
@@ -86,7 +86,7 @@ autoblog archive "<why>"         autoblog reindex             autoblog site setu
 The journal is an Obsidian vault, whether or not you ever open it in Obsidian:
 
 ```
-notes/macOS permissions for dev builds.md      # a topic, revised in place
+notes/macOS permissions for dev builds.md      # a topic
 posts/How we sign Mac apps while prototyping.md
 projects/desktop-tools.md     # what the project is, plus a generated list of what touches it
 archive/<date>/               # entries set aside by `autoblog archive` (hidden from Obsidian search)

@@ -3,7 +3,7 @@ import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { LOCK_PATH, LOG_PATH, REPO_ROOT, STATE_DIR, STATE_PATH, type Config } from "./config";
 import { discover, readDelta, sourceOf, type Delta } from "./transcripts";
-import { projectFor, reviseEntry, writeEntry } from "./journal";
+import { projectFor, writeEntry } from "./journal";
 import { inbandTranscripts } from "./inband";
 import { vaultContext } from "./context";
 
@@ -12,7 +12,6 @@ type State = { transcripts: Record<string, { lines: number; reviewedAt: string }
 type Judgment = {
   reason: string;
   entries: { type: "note" | "post"; title: string; tags: string[]; body: string }[];
-  additions?: { name: string; text: string }[];
   projectSummary?: string;
 };
 
@@ -33,18 +32,6 @@ const SCHEMA = {
           body: { type: "string", description: "Markdown body, without the title heading. Link entries with [[wikilinks]]." },
         },
         required: ["type", "title", "tags", "body"],
-      },
-    },
-    additions: {
-      type: "array",
-      description: "Additions to existing entries whose topic this is. You can't see their bodies, so add only what's new, written to stand on its own.",
-      items: {
-        type: "object",
-        properties: {
-          name: { type: "string", description: "Exact name of an existing note or post, as listed." },
-          text: { type: "string", description: "Markdown to add at the end of the entry, e.g. a new pitfall under its own heading." },
-        },
-        required: ["name", "text"],
       },
     },
   },
@@ -204,22 +191,14 @@ async function reviewDelta(
       console.error(`autoblog: ${String(err)}`);
     }
   }
-  for (const a of judgment.additions ?? []) {
-    if (ctx.dryRun) {
-      console.log(`\n=== add to ${a.name}\n\n${a.text}\n`);
-      continue;
-    }
-    const f = reviseEntry(cfg, a.name, { append: a.text, projects: [project], session: delta.session, agent });
-    if (f) written.push(f);
-  }
   if (ctx.verbose || ctx.dryRun) console.error(`reason: ${judgment.reason}`);
   logDecision({
     source: "sweep",
     transcript: ctx.transcript,
     project,
-    decision: entries.length || judgment.additions?.length ? "write" : "skip",
+    decision: entries.length ? "write" : "skip",
     reason: judgment.reason,
-    titles: [...entries.map((e) => `${e.type}: ${e.title}`), ...(judgment.additions ?? []).map((a) => `+ ${a.name}`)],
+    titles: entries.map((e) => `${e.type}: ${e.title}`),
     written,
     dryRun: !!ctx.dryRun,
   });

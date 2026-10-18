@@ -7,7 +7,7 @@ description: Write to Nate's private journal of notes and posts. Use when the us
 
 autoblog is Nate's private journal, written by his agents across every project. It's organized by topic, not by session, and it holds two kinds of entries:
 
-- **Notes** are short reference pages on a topic that will come up again, like "Counting tokens: pitfalls" or "Keeping long-running work alive when the screen locks". They're revised in place as we learn more.
+- **Notes** are short reference pages on a topic that will come up again, like "Counting tokens: pitfalls" or "Keeping long-running work alive when the screen locks".
 - **Posts** are pieces Nate could publish with light editing: a project ("Spool"), or a way of working ("How we sign Mac apps while prototyping").
 
 **Auto mode is driven by a hook.** At checkpoints, a Stop hook asks you to reflect, and its prompt says what to do. Don't write unprompted otherwise.
@@ -17,11 +17,11 @@ autoblog is Nate's private journal, written by his agents across every project. 
 `/autoblog` with no argument means: capture the most useful thing from the current work. `/autoblog <topic>` means: write about that topic, using what you know from this session.
 
 1. Run `autoblog bar` and follow it. Name the topic first. The incident is evidence, and the topic is the title.
-2. Run `autoblog ls` (or `autoblog search <words>`). If an entry already covers the topic, revise it: run `autoblog show "<name>"`, then rewrite the whole body so it reads as one current page.
+2. Run `autoblog ls` (or `autoblog search <words>`). If an entry already covers the topic, revise it only to fix something that's wrong, or to add to a note something that belongs on that exact page. Run `autoblog show "<name>"`, then send the whole body back with only that change. Never revise to extend a post or bring a project post up to date: new work on a project is a new note or post, or nothing.
 
 ```bash
 autoblog revise "Counting tokens: pitfalls" <<'EOF'
-<the full revised body>
+<the full body, with only the correction or addition changed>
 EOF
 ```
 

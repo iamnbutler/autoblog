@@ -15,7 +15,7 @@ export function vaultContext(cfg: Config, project: string): string {
       ? `  What it is: ${summary.replace(/\n+/g, " ")}`
       : `  It has no description yet. When you write, also pass --project-summary "<one to three sentences: what ${project} is and why it exists, for someone who has never heard of it>".`,
     "",
-    ...section("Notes (revise one when this is its topic):", entries.filter((e) => e.type === "note")),
+    ...section("Notes:", entries.filter((e) => e.type === "note")),
     "",
     ...section("Posts:", entries.filter((e) => e.type === "post")),
   ].join("\n");

@@ -155,10 +155,8 @@ function writeEntryLocked(cfg: Config, e: EntryInput): string {
 }
 
 export type Revision = {
-  /** The whole new body; the entry should read as one current page, not a log. */
+  /** The whole new body: the old one with only a correction or a closely aligned addition. */
   body?: string;
-  /** Text to add at the end instead (the fallback reviewer can't see the current body). */
-  append?: string;
   title?: string;
   tags?: string[];
   projects?: string[];
@@ -167,7 +165,7 @@ export type Revision = {
   agent?: string;
 };
 
-/** Revise an entry in place: new body (or an addition), merged projects, tags and sessions, a new `updated`. */
+/** Revise an entry in place: new body, merged projects, tags and sessions, a new `updated`. */
 export function reviseEntry(cfg: Config, ref: string, r: Revision): string | null {
   ensureJournal(cfg);
   return withLock(cfg, () => {
@@ -189,7 +187,7 @@ export function reviseEntry(cfg: Config, ref: string, r: Revision): string | nul
       sessions: [...new Set([...listOf(front.sessions), ...(r.session ? [r.session] : [])])],
     };
     if (r.agent) next.agent = r.agent;
-    let text = r.body?.trim() ? r.body : r.append?.trim() ? `${body.trimEnd()}\n\n${r.append.trim()}` : body;
+    let text = r.body?.trim() ? r.body : body;
     const oldName = basename(file, ".md");
     if (r.title && noteName(r.title) !== oldName) {
       const name = noteName(r.title);

@@ -89,15 +89,15 @@ export function checkpoint(cfg: Config, ev: HookInput, agent: string): string | 
 function reflectionPrompt(o: { project: string; toolCalls: number; transcript?: string; session: string; agent: string; vault: string }): string {
   return `autoblog checkpoint (${o.toolCalls} tool calls since the last one). This is an automatic reflection; it is not from the user.
 
-Look back over this whole session, not just the last turn. Did we learn something that belongs in Nate's journal? The journal is organized by topic, not by session: short reference notes ("Counting tokens: pitfalls") and rarer posts on a project or a way of working ("How we sign Mac apps while prototyping"). Most checkpoints produce nothing. The most common useful outcome is revising a note that already covers the topic. Read \`autoblog bar\` if it isn't already in your context; it changed recently.${o.transcript ? `\nIf compaction dropped details you need, your full transcript is at ${o.transcript} (grep it; don't read it whole).` : ""}
+Look back over this whole session, not just the last turn. Did we learn something that belongs in Nate's journal? The journal is organized by topic, not by session: short reference notes ("Counting tokens: pitfalls") and rarer posts on a project or a way of working ("How we sign Mac apps while prototyping"). Most checkpoints produce nothing. Existing entries are revised only to fix something that's wrong, or to add to a note something that belongs on that exact page, never to extend a post or keep a project post current. New work on a project becomes a new note or post, or nothing. Read \`autoblog bar\` if it isn't already in your context; it changed recently.${o.transcript ? `\nIf compaction dropped details you need, your full transcript is at ${o.transcript} (grep it; don't read it whole).` : ""}
 
 The journal is an Obsidian vault. Exact names, for revising and for [[wikilinks]]:
 ${o.vault}
 
 For each topic, run one of these. If there's nothing, run the skip command. Then stop. Don't resume other work or summarize this to the user:
-- Revise: \`autoblog show "<exact name>"\`, then rewrite the whole body so it reads as one current page:
+- Revise (a correction, or a closely aligned addition to a note): \`autoblog show "<exact name>"\`, then send the whole body back with only that change:
   autoblog revise "<exact name>" --session ${o.session} <<'EOF'
-  <the full revised body>
+  <the full body, with only the correction or addition changed>
   EOF
 - New: autoblog write --type <note|post> --mode auto --agent ${o.agent} --session ${o.session} --title "<the topic>" --tags a,b [--project a,b] [--project-summary "..."] <<'EOF'
   <body>

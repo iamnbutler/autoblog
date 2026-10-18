@@ -8,22 +8,22 @@ Nate, later. He might be starting something similar, hitting the same wall again
 
 The reference point is his own site, where posts look like "Spool", "Player", "Adding a Favicon in 2024", "Adding Extended Context in GPUI", and "Computer Use For All". They have topic titles, a plain first-person voice, and concrete code, and each one is about a thing he made or a way of doing something. The journal can be rougher than that, but never thinner.
 
-The journal holds two kinds of entries. Both are titled by **topic**, and both are **living**: you revise them in place as we learn more.
+The journal holds two kinds of entries. Both are titled by **topic**. Once written, they change only under the narrow rules in "Revising" below.
 
 ## Notes
 
-A note is a reference page on a topic that will come up again. It answers "what do I need to know about X?", and it stays current.
+A note is a reference page on a topic that will come up again. It answers "what do I need to know about X?"
 
 - Good titles: "Counting tokens: pitfalls", "Keeping long-running work alive when the screen locks", "macOS permissions for dev builds", "Signing and notarizing Mac apps in CI".
 - The title is the topic, phrased the way Nate would search for it. It isn't an event, and it isn't a sentence-long lesson.
 - The body is short: what to do, what goes wrong, and why. Bullets, code, and commands are welcome. Say where it came from in a line (`[[project]]`); don't tell the story of the session.
-- **Revise, don't duplicate.** If a note already covers the topic, add to it: a new pitfall, a better fix, or a correction. Rewrite the whole note so it reads as one current page, not a log of updates.
+- Don't write a second note on a topic a note already covers. Either it qualifies as a revision (below), or it's nothing.
 
 ## Posts
 
 A post is something Nate could put on his site with light editing. It has one of two shapes:
 
-- **A project.** What it is, why it exists, and what's interesting about how it works, like "Spool" or "Player". Write it once the project has a shape worth describing, and revise it as the project changes. The project already has a note under its own name, so give the post a title of its own that says what the project is, like Nate's drafts "Serial by Design" (Tasks) and "Computer Use For All" (Desktop Tools).
+- **A project.** What it is, why it exists, and what's interesting about how it works, like "Spool" or "Player". Write it once the project has a shape worth describing. It describes the project as it was then, and it isn't extended as the project changes. The project already has a note under its own name, so give the post a title of its own that says what the project is, like Nate's drafts "Serial by Design" (Tasks) and "Computer Use For All" (Desktop Tools).
 - **A way of working.** How we do something, refined across sessions and projects, like "How we sign Mac apps while prototyping" or "Designing by exploring several directions at once".
 
 Guidelines:
@@ -34,13 +34,13 @@ Guidelines:
 
 ## Default: nothing
 
-Most checkpoints produce nothing. The most common useful outcome is a revision to an existing note. New notes are occasional, and new posts are rare. There are no quotas in either direction.
+Most checkpoints produce nothing. New notes are occasional, new posts are rare, and revisions are rarer still. There are no quotas in either direction.
 
 Ask these in order:
 
-1. **Does an existing note or post cover this topic?** Revise it.
+1. **Is something in an existing entry now wrong, or does an existing note's topic call for exactly this?** Revise it, within the rules below.
 2. **Is this a topic Nate will hit again, on another project?** Write a new note.
-3. **Is this a project, or a way of working, that's now worth describing whole?** Write a post.
+3. **Is this a project, a significant new piece of one, or a way of working that's now worth describing whole?** Write a post.
 
 Skip everything else:
 
@@ -49,6 +49,15 @@ Skip everything else:
 - orchestrating agents
 - anything the repo's own docs already say
 - anything you can't name as a topic
+
+## Revising
+
+Revising is for two things only:
+
+- **A factual inaccuracy.** Something the entry says is wrong, or no longer true. Fix that, and change nothing else.
+- **A very closely aligned addition to a note.** One new pitfall or fix that belongs on that exact page, where a reader looking up the topic would expect to find it. Keep the existing text. If the addition needs its own heading or more than a short paragraph, it's probably its own note.
+
+Never revise to extend a post, to bring a project post up to date, or to fold in loosely related material. New work on a project becomes new notes, a new post, both, or nothing. When we ship revision history in Next Cloud, for example, that doesn't revise "Next Cloud". It might be a note on how the revision storage works, or a post of its own if it's substantial, or neither. The new entry links the old one.
 
 ## Name the topic first
 
