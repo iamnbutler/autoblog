@@ -23,7 +23,7 @@ A note is a reference page on a topic that will come up again. It answers "what 
 
 A post is something Nate could put on his site with light editing. It has one of two shapes:
 
-- **A project.** What it is, why it exists, and what's interesting about how it works, like "Spool" or "Player". Write it once the project has a shape worth describing, and revise it as the project changes.
+- **A project.** What it is, why it exists, and what's interesting about how it works, like "Spool" or "Player". Write it once the project has a shape worth describing, and revise it as the project changes. The project already has a note under its own name, so give the post a title of its own that says what the project is, like Nate's drafts "Serial by Design" (Tasks) and "Computer Use For All" (Desktop Tools).
 - **A way of working.** How we do something, refined across sessions and projects, like "How we sign Mac apps while prototyping" or "Designing by exploring several directions at once".
 
 Guidelines:

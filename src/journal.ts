@@ -128,6 +128,7 @@ function writeEntryLocked(cfg: Config, e: EntryInput): string {
   const name = noteName(e.title);
   const existing = findEntry(cfg, name);
   if (existing) throw new Error(`"${name}" already exists (${relative(cfg.journal, existing)}); revise it instead: autoblog revise "${name}"`);
+  if (existsSync(projectNotePath(cfg, name))) throw new Error(`"${name}" is a project note; give the post a title of its own (the project is linked through --project)`);
   // A bare YYYY-MM-DD means that local day, not UTC midnight (which is the day before here).
   const parsed = e.date ? new Date(/^\d{4}-\d{2}-\d{2}$/.test(e.date) ? `${e.date}T12:00` : e.date) : null;
   const when = localStamp(parsed && !isNaN(+parsed) ? parsed : new Date());
@@ -193,6 +194,7 @@ export function reviseEntry(cfg: Config, ref: string, r: Revision): string | nul
     if (r.title && noteName(r.title) !== oldName) {
       const name = noteName(r.title);
       if (findEntry(cfg, name)) throw new Error(`"${name}" already exists`);
+      if (existsSync(projectNotePath(cfg, name))) throw new Error(`"${name}" is a project note`);
       next.title = r.title;
       const moved = join(dirname(file), `${name}.md`);
       rmSync(file);
