@@ -116,6 +116,7 @@ Return a link only where a short phrase in the entry names the target: the proje
 - 1 to 5 words, copied exactly from the entry. No backticks, and nothing inside code, links or headings.
 - Not a clause or sentence that merely touches the topic. "A static site is just FROM nginx" doesn't name a note about hosting static sites on Cloudflare.
 - The target has to be what the phrase is about at that point, not just a related entry. A Coolify deploy isn't a Cloudflare Worker.
+- If the phrase names something that isn't on the list, leave it unlinked. Never link it to the closest entry instead: "Calling the Claude API from your own client" isn't "LLM features in apps", and "Terminal-Bench 2.0" isn't a note about tracking benchmarks.
 - One link per target, at its first good mention.
 - Most entries need only a few links, and none is a fine answer.`;
 
