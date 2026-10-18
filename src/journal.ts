@@ -110,7 +110,7 @@ function commit(cfg: Config, message: string) {
   git(cfg, "commit", "-q", "-m", message);
   if (cfg.push) {
     // Detached so agents never wait on the network; the next push catches up after a failure.
-    spawn("git", ["-C", cfg.journal, "push", "-q"], { detached: true, stdio: "ignore" }).unref();
+    spawn("git", ["-C", cfg.journal, "push", "-q", "-u", "origin", "HEAD"], { detached: true, stdio: "ignore" }).unref();
   }
 }
 
