@@ -3,9 +3,10 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import { parseArgs } from "node:util";
 import { LOG_PATH, loadConfig } from "./config";
-import { appendUpdate, commit, ensureJournal, ensureProjectNote, listPosts, projectFor, projectSummary, writePost } from "./journal";
+import { appendUpdate, commitLocked, ensureJournal, ensureProjectNote, listPosts, projectFor, projectSummary, writePost } from "./journal";
 import { logDecision, readBar, sweep } from "./review";
 import { checkpoint, type HookInput } from "./inband";
+import { readDelta } from "./transcripts";
 import { init, install, uninstall } from "./install";
 import { build, deploy, password, setup, siteUrl } from "./deploy";
 
@@ -19,6 +20,7 @@ Usage
                                     show or set what a project is (its hub note)
   autoblog skip "<reason>"          record that a checkpoint found nothing worth writing
   autoblog bar                      print the bar for what is worth writing
+  autoblog transcript <path.jsonl>  condensed, readable view of a Claude Code or Codex transcript
   autoblog search <words...>        grep the journal, newest first
   autoblog ls [--jewels] [-n 20]    list recent posts
   autoblog log [-n 20]              recent auto-mode decisions, in-band and sweep (for tuning)
@@ -62,6 +64,7 @@ async function main() {
           body: { type: "string" },
           mode: { type: "string" },
           "project-summary": { type: "string" },
+          date: { type: "string" },
         },
       });
       const body = values.body ?? (await readStdin());
@@ -80,9 +83,10 @@ async function main() {
         projectSummary: values["project-summary"],
         session: values.session,
         cwd: process.cwd(),
-        mode: values.mode === "auto" ? "auto" : "manual",
+        mode: values.mode === "auto" || values.mode === "backfill" ? values.mode : "manual",
+        date: values.date,
       });
-      logDecision({ source: values.mode === "auto" ? "inband" : "manual", session: values.session, decision: "write", titles: [`[${values.signal ?? 2}] ${values.title}`], written: [file] });
+      logDecision({ source: values.mode === "auto" ? "inband" : (values.mode ?? "manual"), session: values.session, decision: "write", titles: [`[${values.signal ?? 2}] ${values.title}`], written: [file] });
       console.log(file);
       return;
     }
@@ -125,9 +129,22 @@ async function main() {
       if (values.summary) {
         ensureJournal(cfg);
         ensureProjectNote(cfg, name, values.summary, true);
-        commit(cfg, `project: ${name}`);
+        ensureJournal(cfg);
+        commitLocked(cfg, `project: ${name}`);
       }
       console.log(`[[${name}]]\n${projectSummary(cfg, name) ?? "(no description yet)"}`);
+      return;
+    }
+
+    case "transcript": {
+      // Condensed, readable view of a Claude Code or Codex transcript: user, agent, tool calls, clipped results.
+      const { values, positionals } = parseArgs({ args: rest, allowPositionals: true, options: { from: { type: "string" } } });
+      if (!positionals[0]) return console.error("autoblog transcript <path.jsonl> [--from line]");
+      const d = readDelta(positionals[0], Number(values.from ?? 0), Number.MAX_SAFE_INTEGER);
+      const stamps = readFileSync(positionals[0], "utf8").match(/"timestamp":"([^"]+)"/g) ?? [];
+      const when = (i: number) => stamps.at(i)?.slice(13, 29) ?? "?";
+      console.log(`# ${d.source} session ${d.session ?? "?"} in ${d.cwd ?? "?"}, ${when(0)} to ${when(-1)} (${d.userTurns} user turns, ${d.toolCalls} tool calls)\n`);
+      console.log(d.text);
       return;
     }
 
@@ -253,7 +270,7 @@ async function main() {
     case "reindex":
       // After hand edits: rebuild the index, commit, push.
       ensureJournal(cfg);
-      commit(cfg, "reindex");
+      commitLocked(cfg, "reindex");
       return;
 
     case "path":

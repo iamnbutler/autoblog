@@ -1,4 +1,4 @@
-import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { basename, join, relative, resolve } from "node:path";
 import { spawn, spawnSync } from "node:child_process";
 import type { Config } from "./config";
@@ -26,7 +26,9 @@ export type PostInput = {
   cwd?: string;
   agent?: string;
   session?: string;
-  mode: "auto" | "manual";
+  mode: "auto" | "manual" | "backfill";
+  /** When the work happened (any Date-parsable string); defaults to now. */
+  date?: string;
 };
 
 export type PostMeta = {
@@ -83,9 +85,40 @@ export function normalizeLinks(md: string): string {
   });
 }
 
+/**
+ * Several agents can write at once (a backfill fans out), so every write, regenerate, and
+ * commit runs under one lock. mkdir is atomic, which makes it the lock.
+ */
+function withLock<T>(cfg: Config, fn: () => T): T {
+  const lock = join(cfg.journal, ".git", "autoblog.lock");
+  const deadline = Date.now() + 60_000;
+  for (;;) {
+    try {
+      mkdirSync(lock);
+      break;
+    } catch {
+      try {
+        if (Date.now() - statSync(lock).mtimeMs > 120_000) rmSync(lock, { recursive: true, force: true });
+      } catch {}
+      if (Date.now() > deadline) throw new Error("journal is locked by another writer");
+      Bun.sleepSync(100);
+    }
+  }
+  try {
+    return fn();
+  } finally {
+    rmSync(lock, { recursive: true, force: true });
+  }
+}
+
 export function writePost(cfg: Config, p: PostInput): string {
   ensureJournal(cfg);
-  const now = new Date();
+  return withLock(cfg, () => writePostLocked(cfg, p));
+}
+
+function writePostLocked(cfg: Config, p: PostInput): string {
+  const parsed = p.date ? new Date(p.date) : null;
+  const now = parsed && !isNaN(+parsed) ? parsed : new Date();
   const dir = join(cfg.journal, "posts", String(now.getFullYear()));
   mkdirSync(dir, { recursive: true });
   const name = noteName(p.title);
@@ -129,6 +162,10 @@ export function findPost(cfg: Config, ref: string): string | null {
 }
 
 export function appendUpdate(cfg: Config, ref: string, body: string, session?: string): string | null {
+  return withLock(cfg, () => appendUpdateLocked(cfg, ref, body, session));
+}
+
+function appendUpdateLocked(cfg: Config, ref: string, body: string, session?: string): string | null {
   const file = findPost(cfg, ref);
   if (!file) return null;
   appendFileSync(file, redact(`\n## Update ${localStamp(new Date()).slice(0, 10)}${session ? ` (${session.slice(0, 8)})` : ""}\n\n${normalizeLinks(body.trim())}\n`));
@@ -172,6 +209,11 @@ export function ensureJournal(cfg: Config) {
 
 function git(cfg: Config, ...args: string[]) {
   return spawnSync("git", ["-C", cfg.journal, ...args], { encoding: "utf8" });
+}
+
+/** Regenerate, commit and push under the journal lock (for callers outside a write). */
+export function commitLocked(cfg: Config, message: string) {
+  withLock(cfg, () => commit(cfg, message));
 }
 
 export function commit(cfg: Config, message: string) {

@@ -1,5 +1,5 @@
 import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
-import { commit } from "./journal";
+import { commitLocked } from "./journal";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -83,7 +83,7 @@ export function init(opts: { name?: string; repo?: string; dir?: string; noInsta
     if (!readdirSync(join(dir, d)).length) writeFileSync(join(dir, d, ".gitkeep"), "");
   }
   if (!existsSync(join(dir, ".gitignore"))) writeFileSync(join(dir, ".gitignore"), VAULT_GITIGNORE);
-  commit(cfg, "init vault");
+  commitLocked(cfg, "init vault");
   say(`journal     ${dir} (github.com/${repo})`);
 
   if (!opts.noInstall) install(opts);
