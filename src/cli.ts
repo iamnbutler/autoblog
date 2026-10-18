@@ -3,7 +3,7 @@ import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
 import { LOG_PATH, REPO_ROOT, STATE_DIR, loadConfig } from "./config";
-import { listPosts, writePost } from "./journal";
+import { commit, ensureJournal, listPosts, writePost } from "./journal";
 import { sweep } from "./review";
 import { install, uninstall } from "./install";
 
@@ -20,6 +20,7 @@ Usage
   autoblog hook                     Claude Code hook entrypoint (reads hook JSON on stdin)
   autoblog install [--journal-repo owner/name] [--no-launchd] [--no-hooks]
   autoblog uninstall
+  autoblog reindex                  rebuild the journal index after hand edits, commit, push
   autoblog path                     print the journal directory
 `;
 
@@ -154,6 +155,12 @@ async function main() {
 
     case "uninstall":
       return uninstall();
+
+    case "reindex":
+      // After hand edits: rebuild the index, commit, push.
+      ensureJournal(cfg);
+      commit(cfg, "reindex");
+      return;
 
     case "path":
       return console.log(cfg.journal);

@@ -104,7 +104,7 @@ function git(cfg: Config, ...args: string[]) {
   return spawnSync("git", ["-C", cfg.journal, ...args], { encoding: "utf8" });
 }
 
-function commit(cfg: Config, message: string) {
+export function commit(cfg: Config, message: string) {
   writeIndex(cfg);
   git(cfg, "add", "-A");
   git(cfg, "commit", "-q", "-m", message);
