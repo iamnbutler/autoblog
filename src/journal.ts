@@ -62,11 +62,15 @@ export function noteName(title: string): string {
 /** Project name: the git toplevel's basename, ignoring lane/worktree subpaths. */
 export function projectFor(cwd: string | undefined): string {
   if (!cwd) return "unknown";
+  return repoProject(cwd) ?? basename(cwd);
+}
+
+/** The project at cwd, or null when cwd isn't inside a repo (a scratch dir isn't a project). */
+function repoProject(cwd: string): string | null {
   const lane = cwd.match(/^(.*?)\/\.lane\/trees\//);
   if (lane) return basename(lane[1]);
   const r = spawnSync("git", ["-C", cwd, "rev-parse", "--show-toplevel"], { encoding: "utf8" });
-  if (r.status === 0 && r.stdout.trim()) return basename(r.stdout.trim());
-  return basename(cwd);
+  return r.status === 0 && r.stdout.trim() ? basename(r.stdout.trim()) : null;
 }
 
 const pad = (n: number) => String(n).padStart(2, "0");
@@ -168,7 +172,9 @@ export function reviseEntry(cfg: Config, ref: string, r: Revision): string | nul
     let file = findEntry(cfg, ref);
     if (!file) return null;
     const { front, body } = parseFile(readFileSync(file, "utf8"));
-    const projects = [...new Set([...listOf(front.projects), ...projectsFor({ projects: r.projects, cwd: r.cwd }).map((p) => `[[${p}]]`)])];
+    // Revising from inside another repo adds that project; a scratch dir adds nothing.
+    const here = r.projects?.length ? projectsFor({ projects: r.projects }) : r.cwd && repoProject(r.cwd) ? [noteName(repoProject(r.cwd)!)] : [];
+    const projects = [...new Set([...listOf(front.projects), ...here.map((p) => `[[${p}]]`)])];
     for (const p of projects) ensureProjectNote(cfg, unlink(p));
     const next: Front = {
       ...front,
