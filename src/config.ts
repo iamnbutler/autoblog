@@ -1,0 +1,53 @@
+import { homedir } from "node:os";
+import { join } from "node:path";
+import { existsSync, readFileSync } from "node:fs";
+
+const HOME = homedir();
+
+export const STATE_DIR = process.env.AUTOBLOG_STATE_DIR ?? join(HOME, ".autoblog");
+export const CONFIG_PATH = join(STATE_DIR, "config.json");
+export const STATE_PATH = join(STATE_DIR, "state.json");
+export const LOG_PATH = join(STATE_DIR, "decisions.jsonl");
+export const LOCK_PATH = join(STATE_DIR, "sweep.lock");
+export const REPO_ROOT = join(import.meta.dir, "..");
+
+export type Config = {
+  /** Local clone of the private journal repo. */
+  journal: string;
+  /** Model used by the auto-mode reviewer (any `claude --model` value). */
+  model: string;
+  /** A transcript must be untouched this long before it is reviewed: the "end of the lane". */
+  idleMinutes: number;
+  /** Deltas with fewer tool calls than this are skipped without calling the model. */
+  minToolCalls: number;
+  /** Posts rated below this signal (1-3) are logged but not written. */
+  minSignal: number;
+  /** On first sight, transcripts older than this are marked seen instead of backfilled. */
+  lookbackHours: number;
+  /** Condensed transcript budget sent to the reviewer, in characters. */
+  maxChars: number;
+  /** Which transcript sources the sweep reads. */
+  sources: ("claude" | "codex")[];
+  /** Push the journal after each write. */
+  push: boolean;
+};
+
+export const DEFAULTS: Config = {
+  journal: join(HOME, "code", "autoblog-journal"),
+  model: "sonnet",
+  idleMinutes: 20,
+  minToolCalls: 8,
+  minSignal: 1,
+  lookbackHours: 24,
+  maxChars: 120_000,
+  sources: ["claude", "codex"],
+  push: true,
+};
+
+export function loadConfig(): Config {
+  let user: Partial<Config> = {};
+  if (existsSync(CONFIG_PATH)) user = JSON.parse(readFileSync(CONFIG_PATH, "utf8"));
+  const cfg = { ...DEFAULTS, ...user };
+  if (process.env.AUTOBLOG_JOURNAL) cfg.journal = process.env.AUTOBLOG_JOURNAL;
+  return cfg;
+}

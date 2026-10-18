@@ -1,0 +1,8 @@
+#!/bin/sh
+# Resolve through the ~/.local/bin symlink to the repo.
+self="$0"
+while [ -L "$self" ]; do
+  t=$(readlink "$self"); case "$t" in /*) self="$t" ;; *) self="$(dirname "$self")/$t" ;; esac
+done
+root="$(cd "$(dirname "$self")/.." && pwd)"
+exec bun "$root/src/cli.ts" "$@"
