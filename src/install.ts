@@ -97,6 +97,9 @@ export function install(opts: { noLaunchd?: boolean; noHooks?: boolean }) {
     process.exit(1);
   }
 
+  // 1. Dependencies (the site renderer)
+  if (!existsSync(join(REPO_ROOT, "node_modules"))) spawnSync("bun", ["install"], { cwd: REPO_ROOT, stdio: "inherit" });
+
   // 2. CLI on PATH
   link(BIN, CLI);
   say(`cli         ~/.local/bin/autoblog -> ${BIN}`);

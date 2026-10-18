@@ -3,7 +3,17 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "bin": { "autoblog": "bin/autoblog" },
-  "scripts": { "typecheck": "tsc --noEmit" },
-  "devDependencies": { "@types/bun": "latest", "typescript": "^5" }
+  "bin": {
+    "autoblog": "bin/autoblog"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5"
+  },
+  "dependencies": {
+    "marked": "14.1.4"
+  }
 }

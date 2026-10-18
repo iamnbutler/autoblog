@@ -90,6 +90,19 @@ README.md                     # generated home note: jewels, projects, posts by 
 
 Secrets are redacted on write: GitHub, Anthropic, OpenAI, Slack, AWS, and Google tokens, JWTs, private keys, and `*_TOKEN=` style assignments.
 
+## Private site
+
+GitHub Pages can't serve this: even from a private repo, a Pages site is public unless you're on Enterprise Cloud. So `autoblog site setup` deploys the vault to a **Cloudflare Worker behind HTTP basic auth** (`site/worker.js`). It fails closed: if no password is set, nothing is served. The password is generated into the Worker's secrets and your macOS Keychain (`autoblog site password`).
+
+The site keeps Obsidian's semantics. `[[wikilinks]]` resolve by note name, including `|alias` and `#heading`. Every post shows **Linked from** (its backlinks) and more from its project. There are project pages, tag pages, Obsidian callouts, and client-side search. After setup, every journal commit redeploys in the background.
+
+```bash
+autoblog site setup [--worker name] [--user name] [--rotate]   # once
+autoblog site open | deploy | build | password
+```
+
+To put Cloudflare Access (SSO) in front instead, enable Zero Trust on the account and add an Access application for the worker's hostname.
+
 ## Cost
 
 In-band reflection is one extra step for the agent you're already running, and most checkpoints end in a one-line skip. The fallback sweep makes one `claude -p` call per orphaned idle transcript.

@@ -71,6 +71,18 @@ function localStamp(d: Date): string {
 
 const q = (s: string) => JSON.stringify(s);
 
+/**
+ * Point [[wikilinks]] at real note names. Titles can contain characters a filename can't
+ * (`:` `/` `?`), so [[Drop: a Mac app]] becomes [[Drop a Mac app|Drop: a Mac app]].
+ */
+export function normalizeLinks(md: string): string {
+  return md.replace(/\[\[([^\]|#]+)(#[^\]|]*)?(?:\|([^\]]+))?\]\]/g, (all, target: string, heading = "", alias?: string) => {
+    const name = noteName(target);
+    if (name === target.trim()) return all;
+    return `[[${name}${heading}|${alias ?? target.trim()}]]`;
+  });
+}
+
 export function writePost(cfg: Config, p: PostInput): string {
   ensureJournal(cfg);
   const now = new Date();
@@ -102,7 +114,7 @@ export function writePost(cfg: Config, p: PostInput): string {
 
   // Obsidian shows the filename as the title, so drop a leading H1.
   const body = p.body.trim().replace(/^#\s+.*\n+/, "");
-  writeFileSync(file, redact(`${front.join("\n")}${body}\n`));
+  writeFileSync(file, redact(`${front.join("\n")}${normalizeLinks(body)}\n`));
   commit(cfg, `${p.mode}: ${p.title}`);
   return file;
 }
@@ -119,7 +131,7 @@ export function findPost(cfg: Config, ref: string): string | null {
 export function appendUpdate(cfg: Config, ref: string, body: string, session?: string): string | null {
   const file = findPost(cfg, ref);
   if (!file) return null;
-  appendFileSync(file, redact(`\n## Update ${localStamp(new Date()).slice(0, 10)}${session ? ` (${session.slice(0, 8)})` : ""}\n\n${body.trim()}\n`));
+  appendFileSync(file, redact(`\n## Update ${localStamp(new Date()).slice(0, 10)}${session ? ` (${session.slice(0, 8)})` : ""}\n\n${normalizeLinks(body.trim())}\n`));
   commit(cfg, `update: ${basename(file, ".md")}`);
   return file;
 }
@@ -169,6 +181,9 @@ export function commit(cfg: Config, message: string) {
   if (cfg.push) {
     // Detached so agents never wait on the network; the next push catches up after a failure.
     spawn("git", ["-C", cfg.journal, "push", "-q", "-u", "origin", "HEAD"], { detached: true, stdio: "ignore" }).unref();
+  }
+  if (cfg.site) {
+    spawn(process.execPath, [join(import.meta.dir, "cli.ts"), "site", "deploy", "--quiet"], { detached: true, stdio: "ignore" }).unref();
   }
 }
 

@@ -7,6 +7,7 @@ import { appendUpdate, commit, ensureJournal, ensureProjectNote, listPosts, proj
 import { logDecision, readBar, sweep } from "./review";
 import { checkpoint, type HookInput } from "./inband";
 import { init, install, uninstall } from "./install";
+import { build, deploy, password, setup, siteUrl } from "./deploy";
 
 const HELP = `autoblog: an effortless private journal written by your agents
 
@@ -30,6 +31,9 @@ Usage
   autoblog install [--no-launchd] [--no-hooks]
                                     (re)wire the CLI, skill, Stop hooks, and fallback sweep
   autoblog uninstall
+  autoblog site setup [--worker name] [--user name] [--rotate]
+                                    private site on Cloudflare (Worker + basic auth); redeploys after every write
+  autoblog site deploy|build|open|password
   autoblog reindex                  rebuild the journal index after hand edits, commit, push
   autoblog path                     print the journal directory
 `;
@@ -215,6 +219,32 @@ async function main() {
       const { values } = parseArgs({ args: rest, options: { "no-launchd": { type: "boolean" }, "no-hooks": { type: "boolean" } } });
       install({ noLaunchd: values["no-launchd"], noHooks: values["no-hooks"] });
       return;
+    }
+
+    case "site": {
+      const [sub, ...args] = rest;
+      const { values } = parseArgs({
+        args,
+        options: { worker: { type: "string" }, user: { type: "string" }, url: { type: "string" }, rotate: { type: "boolean" }, quiet: { type: "boolean" } },
+      });
+      switch (sub) {
+        case "setup":
+          return setup({ worker: values.worker, user: values.user, url: values.url, rotate: values.rotate });
+        case "deploy":
+          if (!deploy(cfg, values.quiet)) process.exit(1);
+          return;
+        case "build": {
+          const s = build(cfg);
+          return console.log(`built ${s.posts} posts, ${s.projects} projects, ${s.tags} tags -> ~/.autoblog/site/dist`);
+        }
+        case "open":
+          spawnSync("open", [cfg.site?.url ?? "https://dash.cloudflare.com"]);
+          return console.log(siteUrl(cfg));
+        case "password":
+          return console.log(password() ?? "(none; run `autoblog site setup`)");
+        default:
+          return console.error("autoblog site setup|deploy|build|open|password");
+      }
     }
 
     case "uninstall":
