@@ -88,7 +88,7 @@ export function checkpoint(cfg: Config, ev: HookInput, agent: string): string | 
 function reflectionPrompt(o: { project: string; toolCalls: number; transcript?: string; session: string; agent: string; summary: string | null }): string {
   return `autoblog checkpoint (${o.toolCalls} tool calls since the last one). This is an automatic reflection; it is not from the user.
 
-Look back over this whole session, not just the last turn. Did we learn something that belongs in Nate's journal? Most checkpoints produce nothing. If so, run:
+Look back over this whole session, not just the last turn. Did we learn something that belongs in Nate's journal? Most checkpoints produce nothing. If not, run:
   autoblog skip --session ${o.session} "<one-sentence reason>"
 If something might qualify, run \`autoblog guide\` (the autoblog skill) and follow it, passing --session ${o.session} --agent ${o.agent} --mode auto.${o.summary ? "" : ` The ${o.project} project has no description yet, so add --project-summary when you write.`}${o.transcript ? ` If compaction dropped details you need, your full transcript is at ${o.transcript} (grep it; don't read it whole).` : ""}
 
