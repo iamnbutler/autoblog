@@ -8,7 +8,7 @@ import { redact } from "./redact";
  * The journal is an Obsidian vault, whether or not Obsidian ever opens it:
  *   posts/<year>/<Title>.md   one note per story; filename = title so [[Title]] resolves
  *   projects/<name>.md        hub note per project: what it is, plus every post about it
- *   README.md                 generated home note
+ *   README.md                 generated: what this vault is, nothing more
  * Properties are YAML frontmatter, and posts link with [[wikilinks]].
  */
 
@@ -291,7 +291,7 @@ function parseFront(text: string): Record<string, string | string[]> {
 /** Markdown link that works on GitHub and in Obsidian. */
 const mdLink = (title: string, path: string) => `[${title}](${path.split("/").map(encodeURIComponent).join("/")})`;
 
-/** Rebuild generated parts: each project note's post list and the README home note. */
+/** Rebuild generated parts: each project note's post list, and the short README. */
 function regenerate(cfg: Config) {
   const posts = listPosts(cfg);
   const byProject = new Map<string, PostMeta[]>();
@@ -307,30 +307,14 @@ function regenerate(cfg: Config) {
     if (next !== text) writeFileSync(file, next);
   }
 
-  const stars = (n: number) => "★".repeat(n) + "☆".repeat(3 - n);
-  const line = (p: PostMeta) => `- ${stars(p.signal)} ${mdLink(p.title, p.path)} · ${mdLink(p.project, `projects/${noteName(p.project)}.md`)} · ${p.kind}`;
   const lines = [
     "# autoblog",
     "",
-    "A private blog written by agents as we work, via [autoblog](https://github.com/iamnbutler/autoblog). It's an Obsidian vault: open this folder in Obsidian for backlinks and the graph. This file is generated; don't edit it.",
+    "A private blog written by agents as we work, via [autoblog](https://github.com/iamnbutler/autoblog). It's an Obsidian vault: open this folder in Obsidian for backlinks and the graph.",
     "",
-    "## Jewels",
-    "",
-    ...posts.filter((p) => p.signal >= 3).map(line),
-    "",
-    "## Projects",
-    "",
-    ...[...byProject.keys()].sort().map((p) => `- ${mdLink(p, `projects/${noteName(p)}.md`)} (${byProject.get(p)!.length})`),
-    "",
-    "## Posts",
+    "- `posts/<year>/`: one note per story",
+    "- `projects/`: what each project is, and its posts",
+    ...(cfg.site?.url ? [`- ${cfg.site.url}: the private site`] : []),
   ];
-  let month = "";
-  for (const p of posts) {
-    if (p.date.slice(0, 7) !== month) {
-      month = p.date.slice(0, 7);
-      lines.push("", `### ${month}`, "");
-    }
-    lines.push(line(p));
-  }
   writeFileSync(join(cfg.journal, "README.md"), lines.join("\n") + "\n");
 }

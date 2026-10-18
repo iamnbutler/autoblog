@@ -80,7 +80,7 @@ The journal is an Obsidian vault, whether or not you ever open it in Obsidian:
 ```
 posts/2026/Dev builds need one stable app identity, or macOS keeps re-asking for permissions.md
 projects/desktop-tools.md     # what the project is, plus a generated list of its posts
-README.md                     # generated home note: jewels, projects, posts by month
+README.md                     # generated: what the vault is and where things live
 ```
 
 - **Note names are titles,** so `[[wikilinks]]` resolve.
