@@ -1,7 +1,7 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
-import { LOCK_PATH, LOG_PATH, REPO_ROOT, STATE_DIR, STATE_PATH, type Config } from "./config";
+import { isWithin, LOCK_PATH, LOG_PATH, REPO_ROOT, STATE_DIR, STATE_PATH, type Config } from "./config";
 import { discover, readDelta, sourceOf, type Delta } from "./transcripts";
 import { projectFor, writeEntry } from "./journal";
 import { inbandTranscripts } from "./inband";
@@ -149,7 +149,7 @@ function countLines(path: string) {
 /** Sessions that run inside the journal or this repo's reviewer are never reviewed. */
 export function isOwnSession(cfg: Config, d: { cwd?: string }) {
   if (!d.cwd) return false;
-  return d.cwd.startsWith(resolve(cfg.journal)) || d.cwd.startsWith(STATE_DIR);
+  return isWithin(d.cwd, cfg.journal) || isWithin(d.cwd, STATE_DIR);
 }
 
 async function reviewDelta(

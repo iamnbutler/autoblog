@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, relative, resolve } from "node:path";
 import { spawn, spawnSync } from "node:child_process";
-import type { Config } from "./config";
+import { isWithin, REPO_ROOT, type Config } from "./config";
 import { redact } from "./redact";
 
 /*
@@ -174,8 +174,8 @@ export function reviseEntry(cfg: Config, ref: string, r: Revision): string | nul
     if (!file) return null;
     const { front, body } = parseFile(readFileSync(file, "utf8"));
     // --project sets the list outright. Otherwise revising from inside another repo adds that
-    // project, and a scratch dir or the journal adds nothing.
-    const inRepo = r.cwd && !resolve(r.cwd).startsWith(resolve(cfg.journal)) ? repoProject(r.cwd) : null;
+    // project. A scratch dir, the journal, and autoblog's own repo (where backfills run) add nothing.
+    const inRepo = r.cwd && !isWithin(r.cwd, cfg.journal) && !isWithin(r.cwd, REPO_ROOT) ? repoProject(r.cwd) : null;
     const projects = r.projects?.length
       ? projectsFor({ projects: r.projects }).map((p) => `[[${p}]]`)
       : [...new Set([...listOf(front.projects), ...(inRepo ? [`[[${noteName(inRepo)}]]`] : [])])];

@@ -1,6 +1,6 @@
 import { homedir } from "node:os";
-import { join } from "node:path";
-import { existsSync, readFileSync } from "node:fs";
+import { join, resolve, sep } from "node:path";
+import { existsSync, readFileSync, realpathSync } from "node:fs";
 
 const HOME = homedir();
 
@@ -61,4 +61,22 @@ export function loadConfig(): Config {
   const cfg = { ...DEFAULTS, ...user };
   if (process.env.AUTOBLOG_JOURNAL) cfg.journal = process.env.AUTOBLOG_JOURNAL;
   return cfg;
+}
+
+/**
+ * Whether `path` is `dir` or inside it. macOS volumes usually ignore case, so ~/Code and
+ * ~/code are one folder: compare the on-disk spelling, and fold case for paths that no
+ * longer exist (old transcripts).
+ */
+export function isWithin(path: string, dir: string): boolean {
+  const real = (p: string) => {
+    try {
+      return realpathSync.native(p);
+    } catch {
+      return resolve(p);
+    }
+  };
+  let a = real(path), b = real(dir);
+  if (process.platform === "darwin") (a = a.toLowerCase()), (b = b.toLowerCase());
+  return a === b || a.startsWith(b.endsWith(sep) ? b : b + sep);
 }
