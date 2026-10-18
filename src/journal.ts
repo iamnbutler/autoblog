@@ -246,7 +246,7 @@ function regenerate(cfg: Config) {
     const text = readFileSync(file, "utf8");
     const list = ps.map((p) => `- [[${basename(p.path, ".md")}]] · ${p.date.slice(0, 10)} · ${p.kind}`).join("\n");
     const block = `${POSTS_START}\n${list}\n${POSTS_END}`;
-    const next = text.includes(POSTS_START) ? text.replace(new RegExp(`${POSTS_START}[\\s\\S]*?${POSTS_END}`), block) : `${text.trimEnd()}\n\n## Posts\n\n${block}\n`;
+    const next = text.includes(POSTS_START) ? text.slice(0, text.indexOf(POSTS_START)) + block + text.slice(text.indexOf(POSTS_END) + POSTS_END.length) : `${text.trimEnd()}\n\n## Posts\n\n${block}\n`;
     if (next !== text) writeFileSync(file, next);
   }
 
