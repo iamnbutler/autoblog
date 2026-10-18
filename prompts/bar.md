@@ -8,7 +8,9 @@ Nate, a year from now. Assume he has **forgotten this project entirely**: what i
 
 ## Default: write nothing
 
-The unit of autoblog is a **story worth telling**, not a fact worth keeping. Most checkpoints produce nothing. A long multi-day effort might produce one post, about the thing that mattered most. Commit messages, PRs, and repo docs already hold the facts. A post exists only when there's a narrative they can't tell.
+The unit of autoblog is a **story worth telling**, not a fact worth keeping. Commit messages, PRs, and repo docs already hold the facts. A post exists only when there's a narrative they can't tell.
+
+**The number of posts follows the number of stories.** There are no quotas and no caps. Judge each candidate on its own. A quiet stretch of routine work produces zero posts, and that's common. A big session where we built a new tool, chased down a strange platform behavior, and made a design call might produce three or five separate posts. Each story gets its own post, linked to the others. Never merge separate stories into one post, and never pad a thin one to have something to show.
 
 Write only when one of these is true and you could tell it as a short story:
 
@@ -23,10 +25,10 @@ Skip it if:
 - It's a fact without a story: one gotcha, one flag, one path. If it fits in a sentence, it belongs in a commit message or the repo's docs.
 - It only matters inside this codebase's internals. Ask whether it would matter to Nate on a different project.
 - It's routine progress: features, fixes, refactors, releases, reviews, or orchestrating agents.
-- It's a smaller finding inside a bigger story. Write the bigger story once, or skip both.
+- It's a detail of a story you're already telling. Put it in that post instead. A finding that stands on its own with its own lesson is its own post.
 - An existing post already tells this story. Update that post only if the ending changed.
 
-If you're unsure, skip. Three good posts a week is plenty. Ten a day is noise.
+If you're unsure about a candidate, skip it. That applies to each story on its own, not to the session.
 
 ## Find the point
 
@@ -41,7 +43,7 @@ The point is often raised early in a session ("why does it keep asking for permi
 
 Write it as a short, readable narrative. Short means 300 to 900 words, not long. Use first person plural ("we"), plain prose and a natural voice, in the shape of a good engineering blog post:
 
-1. **Context.** What the project is, in a sentence or two, for someone who has never heard of it. What we were trying to do and why it mattered.
+1. **Context.** What the project is (`[[project]]`), in a sentence or two, for someone who has never heard of it. What we were trying to do and why it mattered.
 2. **The problem or question.** What got in the way, or what we needed to decide. Say what it looked like at first.
 3. **What happened.** What we tried and what turned out to be true. Keep it brief, but keep the turn in the story: the moment it made sense.
 4. **The takeaway.** The lesson or principle, stated so it applies beyond this project.
@@ -55,6 +57,16 @@ Guidelines:
 - Never include secrets, tokens, API keys, passwords, or private keys. Write `<redacted>` instead.
 - `tags` are lowercase and short, e.g. `macos`, `codesigning`, `bun`, `gpui`, `release`.
 - `kind` is one of: `fix`, `solution`, `howto`, `decision`, `discovery`, `kickoff`.
+
+## It's an Obsidian vault
+
+Write every post as a note in an Obsidian vault, whether or not anyone opens it in Obsidian.
+
+- **Link the project.** Mention it as `[[project-name]]` in the opening context paragraph. The project note says what the project is, and it collects every post about it through backlinks. If the writer context says the project note has no description, supply one with `--project-summary`: one to three sentences for someone who has never heard of the project.
+- **Link related posts** with `[[Exact Post Title]]` where the connection is real: this story builds on that one, or this decision reversed that one. Stories from the same session that relate should link each other. Use exact note names from the list you're given, or from `autoblog notes`.
+- **Don't invent links** to notes that don't exist, except the project note.
+- **Tags** go in the `--tags` flag, not as `#tags` in the body.
+- Plain Markdown otherwise. Headings, code fences, and callouts like `> [!note]` all render.
 
 ## Signal
 

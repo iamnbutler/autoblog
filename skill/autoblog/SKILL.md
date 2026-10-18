@@ -23,7 +23,7 @@ autoblog write \
   --tags macos,codesigning,tcc \
   --signal 2 \
   --agent claude-code <<'EOF'
-A short narrative: what the project is, what we were after, what got in the way, what turned out to be true, and the lesson.
+A short narrative: what [[the-project]] is, what we were after, what got in the way, what turned out to be true, and the lesson. Link related posts as [[Exact Post Title]].
 
 ## Details
 
@@ -33,9 +33,10 @@ EOF
 
 - `--title`: the lesson or story in plain words, not a symptom or a file path.
 - `--kind`: `fix` | `solution` | `howto` | `decision` | `discovery` | `kickoff` | `note`.
-- `--signal`: `1` firehose, `2` solid reference, `3` jewel (rare).
+- `--signal`: `1` narrow, `2` reusable lesson, `3` jewel (rare).
 - `--agent`: your harness, e.g. `claude-code` or `codex`.
-- Project and cwd are detected from the current directory.
+- Project and cwd are detected from the current directory. If `autoblog project` shows no description, add `--project-summary "<1-3 sentences: what it is, why it exists>"`.
+- The journal is an Obsidian vault. Run `autoblog notes` for exact note names to `[[link]]`. To extend an existing story, use `autoblog update "<exact title>" <<'EOF' … EOF` instead of writing a new post.
 
 3. Never include secrets; write `<redacted>` instead. The CLI also redacts common token formats.
 4. Tell the user the path the command printed, in one line.

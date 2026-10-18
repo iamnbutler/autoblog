@@ -3,24 +3,26 @@ import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { LOCK_PATH, LOG_PATH, REPO_ROOT, STATE_DIR, STATE_PATH, type Config } from "./config";
 import { discover, readDelta, sourceOf, type Delta } from "./transcripts";
-import { appendUpdate, listPosts, projectFor, writePost } from "./journal";
+import { appendUpdate, projectFor, writePost } from "./journal";
 import { inbandTranscripts } from "./inband";
+import { vaultContext } from "./context";
 
 type State = { transcripts: Record<string, { lines: number; reviewedAt: string }> };
 
 type Judgment = {
   reason: string;
   posts: { title: string; kind: string; signal: number; tags: string[]; body: string }[];
-  updates?: { path: string; body: string }[];
+  updates?: { title: string; body: string }[];
+  projectSummary?: string;
 };
 
 const SCHEMA = {
   type: "object",
   properties: {
     reason: { type: "string" },
+    projectSummary: { type: "string", description: "Only when the project note has no description: 1-3 sentences on what the project is." },
     posts: {
       type: "array",
-      maxItems: 1,
       items: {
         type: "object",
         properties: {
@@ -28,21 +30,20 @@ const SCHEMA = {
           kind: { type: "string", enum: ["fix", "solution", "howto", "decision", "discovery", "kickoff"] },
           signal: { type: "integer", minimum: 1, maximum: 3 },
           tags: { type: "array", items: { type: "string" } },
-          body: { type: "string", description: "Markdown body, without the title heading." },
+          body: { type: "string", description: "Markdown body, without the title heading. Link notes with [[wikilinks]]." },
         },
         required: ["title", "kind", "signal", "tags", "body"],
       },
     },
     updates: {
       type: "array",
-      maxItems: 1,
       items: {
         type: "object",
         properties: {
-          path: { type: "string", description: "Path of an existing post, exactly as listed." },
+          title: { type: "string", description: "Exact name of an existing post, as listed." },
           body: { type: "string", description: "Markdown to append under a dated Update heading." },
         },
-        required: ["path", "body"],
+        required: ["title", "body"],
       },
     },
   },
@@ -122,8 +123,10 @@ export async function sweep(cfg: Config, opts: SweepOpts = {}) {
       }
       if (!explicit && now - t.mtimeMs < cfg.idleMinutes * 60_000) continue;
 
-      const delta = readDelta(t.path, seen?.lines ?? 0, cfg.maxChars);
-      if (delta.lines <= (seen?.lines ?? 0)) continue;
+      // An explicit review reads the whole transcript; the sweep resumes where it left off.
+      const from = opts.force ? 0 : (seen?.lines ?? 0);
+      const delta = readDelta(t.path, from, cfg.maxChars);
+      if (delta.lines <= from) continue;
       const mark = () => (state.transcripts[t.path] = { lines: delta.lines, reviewedAt: new Date().toISOString() });
 
       if (isOwnSession(cfg, delta)) {
@@ -167,20 +170,13 @@ async function reviewDelta(
   ctx: { transcript: string; dryRun?: boolean; verbose?: boolean },
 ): Promise<string[] | null> {
   const project = projectFor(delta.cwd);
-  const recent = listPosts(cfg).slice(0, 40);
-  const sameProject = recent.filter((p) => p.project === project);
-  const listing = (sameProject.length ? sameProject : recent)
-    .slice(0, 25)
-    .map((p) => `- ${p.path} | ${p.title} | ${p.kind} | ${p.tags.join(",")}`)
-    .join("\n");
-
   const input = [
     `Project: ${project}`,
     `Agent: ${delta.source}`,
     delta.cwd ? `Directory: ${delta.cwd}` : "",
     "",
-    "## Existing journal posts (avoid duplicates; prefer `updates` for these)",
-    listing || "(none yet)",
+    "## The vault (an Obsidian vault; link with [[wikilinks]] using exact names)",
+    vaultContext(cfg, project),
     "",
     delta.opener ? `## Session opener (earlier context)\n${delta.opener.slice(0, 2000)}\n` : "",
     "## Transcript (condensed; this is the part to judge)",
@@ -205,15 +201,15 @@ async function reviewDelta(
       continue;
     }
     written.push(
-      writePost(cfg, { ...p, project, cwd: delta.cwd, agent: delta.source === "claude" ? "claude-code" : "codex", session: delta.session, mode: "auto" }),
+      writePost(cfg, { ...p, project, projectSummary: judgment.projectSummary, cwd: delta.cwd, agent: delta.source === "claude" ? "claude-code" : "codex", session: delta.session, mode: "auto" }),
     );
   }
   for (const u of judgment.updates ?? []) {
     if (ctx.dryRun) {
-      console.log(`\n=== update ${u.path}\n\n${u.body}\n`);
+      console.log(`\n=== update ${u.title}\n\n${u.body}\n`);
       continue;
     }
-    const f = appendUpdate(cfg, u.path, u.body, delta.session);
+    const f = appendUpdate(cfg, u.title, u.body, delta.session);
     if (f) written.push(f);
   }
   if (ctx.verbose || ctx.dryRun) console.error(`reason: ${judgment.reason}`);

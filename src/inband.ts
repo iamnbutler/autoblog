@@ -1,7 +1,8 @@
 import { closeSync, existsSync, fstatSync, mkdirSync, openSync, readFileSync, readSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { STATE_DIR, type Config } from "./config";
-import { listPosts, projectFor } from "./journal";
+import { projectFor } from "./journal";
+import { vaultContext } from "./context";
 import { logDecision } from "./review";
 
 /**
@@ -82,31 +83,22 @@ export function checkpoint(cfg: Config, ev: HookInput, agent: string): string | 
   if (!due) return null;
 
   const project = projectFor(ev.cwd);
-  const posts = listPosts(cfg).filter((p) => p.project === project).slice(0, 15);
-  return reflectionPrompt({ project, toolCalls, transcript: ev.transcript_path, session: ev.session_id, agent, posts });
+  return reflectionPrompt({ project, toolCalls, transcript: ev.transcript_path, session: ev.session_id, agent, vault: vaultContext(cfg, project) });
 }
 
-function reflectionPrompt(o: {
-  project: string;
-  toolCalls: number;
-  transcript?: string;
-  session: string;
-  agent: string;
-  posts: { path: string; title: string }[];
-}): string {
-  const existing = o.posts.length ? o.posts.map((p) => `  - ${p.path} | ${p.title}`).join("\n") : "  (none yet)";
+function reflectionPrompt(o: { project: string; toolCalls: number; transcript?: string; session: string; agent: string; vault: string }): string {
   return `autoblog checkpoint (${o.toolCalls} tool calls since the last one). This is an automatic reflection; it is not from the user.
 
-Look back over this whole session, not just the last turn, and decide whether there's a story here worth a post on Nate's private blog: something we figured out, built, decided, or learned that he'd want to read a year from now, having forgotten this project entirely. Most checkpoints produce nothing. The bar and the writing style are in \`autoblog bar\`. Read it if it isn't already in your context; it changed recently.${o.transcript ? `\nIf compaction dropped details you need, your full transcript is at ${o.transcript} (grep it; don't read it whole).` : ""}
+Look back over this whole session, not just the last turn, and find the stories worth a post on Nate's private blog: things we figured out, built, decided, or learned that he'd want to read a year from now, having forgotten this project entirely. Judge each story on its own. Often there are none, and sometimes there are several; write one post per story. The bar and the writing style are in \`autoblog bar\`. Read it if it isn't already in your context; it changed recently.${o.transcript ? `\nIf compaction dropped details you need, your full transcript is at ${o.transcript} (grep it; don't read it whole).` : ""}
 
-Existing posts for ${o.project} (update one of these rather than duplicating it):
-${existing}
+The blog is an Obsidian vault. Link the project and related posts with [[wikilinks]], using exact note names:
+${o.vault}
 
-Do exactly one of these, then stop. Don't resume other work or summarize this to the user:
-- autoblog write --mode auto --agent ${o.agent} --session ${o.session} --title "..." --kind <fix|solution|howto|decision|discovery|kickoff> --tags a,b --signal <1-3> <<'EOF'
+For each story, run one of these. If there are none, run the skip command. Then stop. Don't resume other work or summarize this to the user:
+- autoblog write --mode auto --agent ${o.agent} --session ${o.session} --title "..." --kind <fix|solution|howto|decision|discovery|kickoff> --tags a,b --signal <1-3> [--project-summary "..."] <<'EOF'
   <body>
   EOF
-- autoblog update <post path> --session ${o.session} <<'EOF'
+- autoblog update "<exact post title>" --session ${o.session} <<'EOF'
   <what's new>
   EOF
 - autoblog skip --session ${o.session} "<one-sentence reason>"`;

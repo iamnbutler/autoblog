@@ -37,7 +37,7 @@ export type Config = {
 };
 
 export const DEFAULTS: Config = {
-  journal: join(HOME, "code", "autoblog-journal"),
+  journal: join(HOME, "code", "autoblog"), // replaced by `autoblog init` with ~/code/<you>-autoblog
   model: "opus",
   reflectEvery: 40,
   reflectEveryTurns: 6,

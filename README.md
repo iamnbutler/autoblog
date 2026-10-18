@@ -33,21 +33,22 @@ The bar is the product, so read [`prompts/bar.md`](prompts/bar.md). In short, a 
 
 ## Install
 
-Requires [bun](https://bun.sh), `gh`, and the `claude` CLI.
+Requires [bun](https://bun.sh), an authenticated `gh`, and the `claude` CLI.
 
 ```bash
-gh repo create <you>/autoblog-journal --private   # once
 git clone https://github.com/iamnbutler/autoblog ~/code/autoblog
-~/code/autoblog/bin/autoblog install --journal-repo <you>/autoblog-journal
+~/code/autoblog/bin/autoblog init
 ```
 
-`install` clones the journal and links `~/.local/bin/autoblog`. It also links the skill into each harness, adds the `Stop` hooks for Claude Code and Codex, and loads the launchd fallback. On first run it only watches transcripts from the last `lookbackHours` (24) and doesn't backfill everything. `autoblog uninstall` reverses all of it except the journal and `~/.autoblog`.
+`init` creates your private `<you>/<you>-autoblog` repo if it doesn't exist, clones it to `~/code/<you>-autoblog`, and scaffolds it as an Obsidian vault. Then it runs `install`, which links `~/.local/bin/autoblog`, links the skill into each harness, adds the `Stop` hooks for Claude Code and Codex, and loads the launchd fallback. Both commands are idempotent. Override with `--name`, `--repo owner/name`, or `--dir`. The fallback only reviews transcripts from the last `lookbackHours` (24); it doesn't backfill everything. `autoblog uninstall` reverses everything except the vault and `~/.autoblog`.
 
 ## CLI
 
 ```
 autoblog write --title <t> [--kind k] [--tags a,b] [--signal 1-3] [--mode auto] < body.md
-autoblog update <post> < more.md   autoblog skip "<reason>"   autoblog bar
+autoblog update <title> < more.md  autoblog skip "<reason>"   autoblog bar
+autoblog notes                   autoblog project [name] [--summary "..."]
+autoblog init                    autoblog install            autoblog uninstall
 autoblog search <words...>       autoblog ls [--jewels]       autoblog log
 autoblog sweep [--dry-run -v]    autoblog review <transcript.jsonl> [--dry-run]
 ```
@@ -58,7 +59,7 @@ autoblog sweep [--dry-run -v]    autoblog review <transcript.jsonl> [--dry-run]
 
 ```json
 {
-  "journal": "~/code/autoblog-journal",
+  "journal": "~/code/<you>-autoblog",
   "model": "opus",
   "reflectEvery": 40,
   "reflectEveryTurns": 6,
@@ -72,14 +73,22 @@ autoblog sweep [--dry-run -v]    autoblog review <transcript.jsonl> [--dry-run]
 }
 ```
 
-## Journal layout
+## The vault
+
+The journal is an Obsidian vault, whether or not you ever open it in Obsidian:
 
 ```
-posts/2026/10/2026-10-17-transparent-nspanel-clicks-fall-through.md
-README.md   # generated index: jewels first, then every post by month
+posts/2026/Dev builds need one stable app identity, or macOS keeps re-asking for permissions.md
+projects/desktop-tools.md     # what the project is, plus a generated list of its posts
+README.md                     # generated home note: jewels, projects, posts by month
 ```
 
-Each post has frontmatter: `title, date, project, kind, signal, tags, mode, agent, cwd, session`. Secrets are redacted on write: GitHub, Anthropic, OpenAI, Slack, AWS, and Google tokens, JWTs, private keys, and `*_TOKEN=` style assignments. The reviewer is also told never to include them.
+- **Note names are titles,** so `[[wikilinks]]` resolve.
+- **Each post** links its project note (`project: "[[desktop-tools]]"` and in the prose) and links related posts. The writer gets the exact names of existing notes to link to.
+- **Project notes** start with an agent-written description (`--project-summary`, or `autoblog project <name> --summary`), because a year from now you won't remember what the project was.
+- **Properties:** `title, date, project, kind, signal, tags, mode, agent, session, cwd`.
+
+Secrets are redacted on write: GitHub, Anthropic, OpenAI, Slack, AWS, and Google tokens, JWTs, private keys, and `*_TOKEN=` style assignments.
 
 ## Cost
 

@@ -1,18 +1,21 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { basename, join } from "node:path";
 import { parseArgs } from "node:util";
 import { LOG_PATH, loadConfig } from "./config";
-import { appendUpdate, commit, ensureJournal, listPosts, projectFor, writePost } from "./journal";
+import { appendUpdate, commit, ensureJournal, ensureProjectNote, listPosts, projectFor, projectSummary, writePost } from "./journal";
 import { logDecision, readBar, sweep } from "./review";
 import { checkpoint, type HookInput } from "./inband";
-import { install, uninstall } from "./install";
+import { init, install, uninstall } from "./install";
 
 const HELP = `autoblog: an effortless private journal written by your agents
 
 Usage
   autoblog write --title <t> [--kind k] [--tags a,b] [--signal 1-3] [--agent a] [--mode manual|auto] < body.md
-  autoblog update <post path> < more.md   append a dated update to an existing post
+  autoblog update <title|path> < more.md   append a dated update to an existing post
+  autoblog notes [--project p]      exact note names, for [[wikilinks]]
+  autoblog project [name] [--summary "..."]
+                                    show or set what a project is (its hub note)
   autoblog skip "<reason>"          record that a checkpoint found nothing worth writing
   autoblog bar                      print the bar for what is worth writing
   autoblog search <words...>        grep the journal, newest first
@@ -22,7 +25,10 @@ Usage
   autoblog review <transcript> [--dry-run]
                                     review one transcript, ignoring idle and size gates
   autoblog hook [--agent codex]     Stop hook entrypoint (reads hook JSON on stdin)
-  autoblog install [--journal-repo owner/name] [--no-launchd] [--no-hooks]
+  autoblog init [--name n | --repo owner/name] [--dir path] [--no-install]
+                                    create/clone the private {name}-autoblog vault, then install
+  autoblog install [--no-launchd] [--no-hooks]
+                                    (re)wire the CLI, skill, Stop hooks, and fallback sweep
   autoblog uninstall
   autoblog reindex                  rebuild the journal index after hand edits, commit, push
   autoblog path                     print the journal directory
@@ -51,6 +57,7 @@ async function main() {
           session: { type: "string" },
           body: { type: "string" },
           mode: { type: "string" },
+          "project-summary": { type: "string" },
         },
       });
       const body = values.body ?? (await readStdin());
@@ -66,6 +73,7 @@ async function main() {
         signal: values.signal ? Number(values.signal) : 2,
         agent: values.agent ?? (process.env.CLAUDECODE ? "claude-code" : process.env.CODEX_SANDBOX || process.env.CODEX_HOME ? "codex" : undefined),
         project: values.project,
+        projectSummary: values["project-summary"],
         session: values.session,
         cwd: process.cwd(),
         mode: values.mode === "auto" ? "auto" : "manual",
@@ -79,12 +87,12 @@ async function main() {
       const { values, positionals } = parseArgs({ args: rest, allowPositionals: true, options: { session: { type: "string" }, body: { type: "string" } } });
       const body = values.body ?? (await readStdin());
       if (!positionals[0] || !body.trim()) {
-        console.error("autoblog update <post path> < body.md");
+        console.error("autoblog update <title|path> < body.md");
         process.exit(2);
       }
       const file = appendUpdate(cfg, positionals[0], body, values.session);
       if (!file) {
-        console.error(`autoblog update: no post at ${positionals[0]} (paths are relative to ${cfg.journal})`);
+        console.error(`autoblog update: no post matches ${positionals[0]} (see \`autoblog notes\`)`);
         process.exit(2);
       }
       logDecision({ source: "inband", session: values.session, decision: "update", written: [file] });
@@ -95,6 +103,27 @@ async function main() {
     case "skip": {
       const { values, positionals } = parseArgs({ args: rest, allowPositionals: true, options: { session: { type: "string" } } });
       logDecision({ source: "inband", session: values.session, project: projectFor(process.cwd()), decision: "skip", reason: positionals.join(" ") });
+      return;
+    }
+
+    case "notes": {
+      const { values } = parseArgs({ args: rest, options: { project: { type: "string" } } });
+      const posts = listPosts(cfg).filter((p) => !values.project || p.project === values.project);
+      for (const p of posts) console.log(`[[${basename(p.path, ".md")}]]  (${p.project}, ${p.date.slice(0, 10)})`);
+      const projects = existsSync(join(cfg.journal, "projects")) ? readdirSync(join(cfg.journal, "projects")).filter((f) => f.endsWith(".md")) : [];
+      for (const f of projects) console.log(`[[${basename(f, ".md")}]]  (project)`);
+      return;
+    }
+
+    case "project": {
+      const { values, positionals } = parseArgs({ args: rest, allowPositionals: true, options: { summary: { type: "string" } } });
+      const name = positionals[0] ?? projectFor(process.cwd());
+      if (values.summary) {
+        ensureJournal(cfg);
+        ensureProjectNote(cfg, name, values.summary, true);
+        commit(cfg, `project: ${name}`);
+      }
+      console.log(`[[${name}]]\n${projectSummary(cfg, name) ?? "(no description yet)"}`);
       return;
     }
 
@@ -166,12 +195,25 @@ async function main() {
       return;
     }
 
-    case "install": {
+    case "init": {
       const { values } = parseArgs({
         args: rest,
-        options: { "journal-repo": { type: "string" }, "no-launchd": { type: "boolean" }, "no-hooks": { type: "boolean" } },
+        options: {
+          name: { type: "string" },
+          repo: { type: "string" },
+          dir: { type: "string" },
+          "no-install": { type: "boolean" },
+          "no-launchd": { type: "boolean" },
+          "no-hooks": { type: "boolean" },
+        },
       });
-      install({ journalRepo: values["journal-repo"], noLaunchd: values["no-launchd"], noHooks: values["no-hooks"] });
+      init({ name: values.name, repo: values.repo, dir: values.dir, noInstall: values["no-install"], noLaunchd: values["no-launchd"], noHooks: values["no-hooks"] });
+      return;
+    }
+
+    case "install": {
+      const { values } = parseArgs({ args: rest, options: { "no-launchd": { type: "boolean" }, "no-hooks": { type: "boolean" } } });
+      install({ noLaunchd: values["no-launchd"], noHooks: values["no-hooks"] });
       return;
     }
 

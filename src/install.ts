@@ -1,4 +1,5 @@
-import { existsSync, lstatSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { commit } from "./journal";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -38,22 +39,63 @@ function link(target: string, path: string) {
   symlinkSync(target, path);
 }
 
-export function install(opts: { journalRepo?: string; noLaunchd?: boolean; noHooks?: boolean }) {
-  const say = (m: string) => console.log(`  ${m}`);
-  mkdirSync(STATE_DIR, { recursive: true });
-  if (!existsSync(CONFIG_PATH)) writeFileSync(CONFIG_PATH, JSON.stringify(DEFAULTS, null, 2) + "\n");
-  const cfg = loadConfig();
+const VAULT_GITIGNORE = `# Obsidian per-device state
+.obsidian/workspace*.json
+.obsidian/cache
+.trash/
+.DS_Store
+`;
 
-  // 1. Journal clone
-  if (!existsSync(join(cfg.journal, ".git"))) {
-    if (!opts.journalRepo) {
-      console.error(`journal missing at ${cfg.journal}; pass --journal-repo <owner/name> to clone it`);
-      process.exit(1);
-    }
-    const r = spawnSync("gh", ["repo", "clone", opts.journalRepo, cfg.journal], { stdio: "inherit" });
+/**
+ * Set up the private journal: <name>/<name>-autoblog on GitHub, cloned locally and
+ * scaffolded as an Obsidian vault. Then wire every harness (unless noInstall).
+ */
+export function init(opts: { name?: string; repo?: string; dir?: string; noInstall?: boolean; noLaunchd?: boolean; noHooks?: boolean }) {
+  const say = (m: string) => console.log(`  ${m}`);
+  const sh = (cmd: string, args: string[]) => spawnSync(cmd, args, { encoding: "utf8" });
+
+  const name = opts.name ?? sh("gh", ["api", "user", "-q", ".login"]).stdout.trim();
+  if (!name && !opts.repo) {
+    console.error("autoblog init: couldn't detect your GitHub login (is `gh` authenticated?); pass --name or --repo owner/name");
+    process.exit(1);
+  }
+  const repo = opts.repo ?? `${name}/${name}-autoblog`;
+  const repoName = repo.split("/")[1];
+  const dir = opts.dir ?? join(existsSync(join(HOME, "code")) ? join(HOME, "code") : HOME, repoName);
+
+  if (sh("gh", ["repo", "view", repo]).status !== 0) {
+    const r = spawnSync("gh", ["repo", "create", repo, "--private", "--description", "Private autoblog: stories agents write as we work"], { stdio: "inherit" });
+    if (r.status !== 0) process.exit(1);
+    say(`created     github.com/${repo} (private)`);
+  }
+  if (!existsSync(join(dir, ".git"))) {
+    const r = spawnSync("gh", ["repo", "clone", repo, dir], { stdio: "inherit" });
     if (r.status !== 0) process.exit(1);
   }
-  say(`journal     ${cfg.journal}`);
+
+  mkdirSync(STATE_DIR, { recursive: true });
+  const current = existsSync(CONFIG_PATH) ? JSON.parse(readFileSync(CONFIG_PATH, "utf8")) : DEFAULTS;
+  writeFileSync(CONFIG_PATH, JSON.stringify({ ...current, journal: dir }, null, 2) + "\n");
+  const cfg = loadConfig();
+
+  for (const d of ["posts", "projects"]) {
+    mkdirSync(join(dir, d), { recursive: true });
+    if (!readdirSync(join(dir, d)).length) writeFileSync(join(dir, d, ".gitkeep"), "");
+  }
+  if (!existsSync(join(dir, ".gitignore"))) writeFileSync(join(dir, ".gitignore"), VAULT_GITIGNORE);
+  commit(cfg, "init vault");
+  say(`journal     ${dir} (github.com/${repo})`);
+
+  if (!opts.noInstall) install(opts);
+}
+
+export function install(opts: { noLaunchd?: boolean; noHooks?: boolean }) {
+  const say = (m: string) => console.log(`  ${m}`);
+  const cfg = loadConfig();
+  if (!existsSync(join(cfg.journal, ".git"))) {
+    console.error(`journal missing at ${cfg.journal}; run \`autoblog init\` first`);
+    process.exit(1);
+  }
 
   // 2. CLI on PATH
   link(BIN, CLI);
