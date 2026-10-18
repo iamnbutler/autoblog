@@ -1,6 +1,6 @@
 ---
 name: autoblog
-description: Write to Nate's private journal of notes and posts. Use when the user says "/autoblog", "autoblog this", "write up an autoblog", "blog this", "make a note of this", or asks to record how something was done for later reference. Also use to search the journal when asked "how did we do X again?".
+description: Write to Nate's private journal of notes and posts. Use when the user says "/autoblog", "autoblog this", "write up an autoblog", "blog this", "make a note of this", or asks to record how something was done for later reference; when an autoblog checkpoint asks you to reflect; and to search the journal when asked "how did we do X again?".
 ---
 
 # autoblog
@@ -10,39 +10,45 @@ autoblog is Nate's private journal, written by his agents across every project. 
 - **Notes** are short reference pages on a topic that will come up again, like "Counting tokens: pitfalls" or "Keeping long-running work alive when the screen locks".
 - **Posts** are pieces Nate could publish with light editing: a project ("Spool"), or a way of working ("How we sign Mac apps while prototyping").
 
-**Auto mode is driven by a hook.** At checkpoints, a Stop hook asks you to reflect, and its prompt says what to do. Don't write unprompted otherwise.
+You get here two ways. A **checkpoint** (a Stop hook) asks you to look back over the session; pass the `--session`, `--agent` and `--mode auto` it gives you. Or the user asks: `/autoblog` means capture the most useful thing from the current work, and `/autoblog <topic>` means write about that topic. Don't write unprompted otherwise.
 
-## Manual mode: the user asked for an entry
+## Steps
 
-`/autoblog` with no argument means: capture the most useful thing from the current work. `/autoblog <topic>` means: write about that topic, using what you know from this session.
+1. Run `autoblog bar` and follow it. Most checkpoints end in a skip.
+2. Name the topic. The incident is evidence; the topic is the title, phrased the way Nate would search for it.
+3. Run `autoblog search <a few words of the topic>` to see whether an entry already covers it. `autoblog ls` lists everything.
+4. Then do one of these:
 
-1. Run `autoblog bar` and follow it. Name the topic first. The incident is evidence, and the topic is the title.
-2. Run `autoblog ls` (or `autoblog search <words>`). If an entry already covers the topic, revise it only to fix something that's wrong, or to add to a note something that belongs on that exact page. Run `autoblog show "<name>"`, then send the whole body back with only that change. Never revise to extend a post or bring a project post up to date: new work on a project is a new note or post, or nothing.
+**Skip** (checkpoints only), with a one-sentence reason:
 
 ```bash
-autoblog revise "Counting tokens: pitfalls" <<'EOF'
+autoblog skip --session <id> "<why nothing here clears the bar>"
+```
+
+**Revise** an existing entry, only to fix something that's wrong, or to add to a note one thing that belongs on that exact page. Never to extend a post or bring a project post up to date. Print it, then send the whole body back with only that change:
+
+```bash
+autoblog show "Counting tokens: pitfalls"
+autoblog revise "Counting tokens: pitfalls" [--session <id>] <<'EOF'
 <the full body, with only the correction or addition changed>
 EOF
 ```
 
-3. Otherwise, write a new entry. The body goes on stdin:
+**Write** a new entry. The body goes on stdin:
 
 ```bash
-autoblog write --type note \
-  --title "macOS permissions for dev builds" \
-  --tags macos,tcc,codesigning \
-  --agent claude-code <<'EOF'
-What to do, what goes wrong, and why, with commands. Mention where it came from: [[the-project]].
+autoblog write --type note --title "macOS permissions for dev builds" \
+  --tags macos,tcc,codesigning --agent claude-code [--session <id> --mode auto] <<'EOF'
+What to do, what goes wrong, and why, with commands.
 EOF
 ```
 
 - `--type`: `note` (the usual) or `post` (rare: a project, or a way of working).
-- `--title`: the topic, as Nate would search for it. Never an event.
-- `--project a,b`: the projects it draws on. The default is the current directory's project. If `autoblog project` shows no description, add `--project-summary "<1-3 sentences>"`.
-- Link related entries by exact name (`[[Name]]`), using the names `autoblog ls` prints.
+- `--project a,b`: the projects it draws on. The default is the current directory's project. If `autoblog project <name>` shows no description, add `--project-summary "<1-3 sentences>"`.
+- Don't add `[[links]]` to other entries or projects. autoblog links entries after every write. Name related topics plainly in the text, and it will find them.
+- Never include secrets. Write `<redacted>` instead. The CLI also redacts common token formats.
 
-4. Never include secrets. Write `<redacted>` instead. The CLI also redacts common token formats.
-5. Tell the user the path the command printed, in one line.
+5. If the user asked, tell them the path the command printed, in one line. After a checkpoint, just stop: don't resume other work or summarize it.
 
 ## Reading the journal
 

@@ -97,7 +97,7 @@ export function normalizeLinks(md: string): string {
  * Several agents can write at once (a backfill fans out), so every write, regenerate, and
  * commit runs under one lock. mkdir is atomic, which makes it the lock.
  */
-function withLock<T>(cfg: Config, fn: () => T): T {
+export function withLock<T>(cfg: Config, fn: () => T): T {
   const lock = join(cfg.journal, ".git", "autoblog.lock");
   const deadline = Date.now() + 60_000;
   for (;;) {
@@ -150,7 +150,7 @@ function writeEntryLocked(cfg: Config, e: EntryInput): string {
     mode: e.mode,
   };
   writeFileSync(file, redact(serialize(front, e.body)));
-  commit(cfg, `${e.mode}: ${e.type} ${name}`);
+  commit(cfg, `${e.mode}: ${e.type} ${name}`, { link: name });
   return file;
 }
 
@@ -200,7 +200,7 @@ export function reviseEntry(cfg: Config, ref: string, r: Revision): string | nul
       relink(cfg, oldName, name);
     }
     writeFileSync(file, redact(serialize(next, text)));
-    commit(cfg, `revise: ${basename(file, ".md")}`);
+    commit(cfg, `revise: ${basename(file, ".md")}`, { link: basename(file, ".md") });
     return file;
   });
 }
@@ -312,7 +312,11 @@ export function commitLocked(cfg: Config, message: string) {
   withLock(cfg, () => commit(cfg, message));
 }
 
-export function commit(cfg: Config, message: string) {
+/**
+ * Commit, then push and redeploy in the background. After a write, `link` names the entry:
+ * the background job links it to the rest of the journal first, and deploys after that.
+ */
+export function commit(cfg: Config, message: string, opts: { link?: string } = {}) {
   regenerate(cfg);
   git(cfg, "add", "-A");
   git(cfg, "commit", "-q", "-m", message);
@@ -320,9 +324,8 @@ export function commit(cfg: Config, message: string) {
     // Detached so agents never wait on the network; the next push catches up after a failure.
     spawn("git", ["-C", cfg.journal, "push", "-q", "-u", "origin", "HEAD"], { detached: true, stdio: "ignore" }).unref();
   }
-  if (cfg.site) {
-    spawn(process.execPath, [join(import.meta.dir, "cli.ts"), "site", "deploy", "--quiet"], { detached: true, stdio: "ignore" }).unref();
-  }
+  const job = opts.link ? ["link", opts.link, "--after-write"] : cfg.site ? ["site", "deploy", "--quiet"] : null;
+  if (job) spawn(process.execPath, [join(import.meta.dir, "cli.ts"), ...job], { detached: true, stdio: "ignore" }).unref();
 }
 
 function walk(d: string): string[] {
@@ -360,9 +363,9 @@ export function listEntries(cfg: Config, type?: EntryType): EntryMeta[] {
   return out.sort((a, b) => b.updated.localeCompare(a.updated));
 }
 
-type Front = Record<string, string | string[]>;
+export type Front = Record<string, string | string[]>;
 
-function serialize(front: Front, body: string): string {
+export function serialize(front: Front, body: string): string {
   const lines = ["---"];
   for (const [k, v] of Object.entries(front)) {
     if (Array.isArray(v)) lines.push(v.length ? `${k}:\n${v.map((x) => `  - ${/^[\w./-]+$/.test(x) ? x : q(x)}`).join("\n")}` : `${k}: []`);
@@ -373,7 +376,7 @@ function serialize(front: Front, body: string): string {
   return `${lines.join("\n")}\n---\n\n${normalizeLinks(text)}\n`;
 }
 
-function parseFile(text: string): { front: Front; body: string } {
+export function parseFile(text: string): { front: Front; body: string } {
   const m = text.match(/^---\n([\s\S]*?)\n---\n?/);
   return { front: m ? parseFront(m[1]) : {}, body: m ? text.slice(m[0].length).replace(/^\n+/, "") : text };
 }

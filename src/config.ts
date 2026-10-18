@@ -16,6 +16,8 @@ export type Config = {
   journal: string;
   /** Model used by the auto-mode reviewer (any `claude --model` value). */
   model: string;
+  /** Model the linker uses to find mentions of other entries. */
+  linkModel: string;
   /** In-band: a Stop hook asks the agent to reflect once this many tool calls pile up. */
   reflectEvery: number;
   /** In-band, when the harness gives no transcript to measure: reflect every N turns. */
@@ -39,6 +41,7 @@ export type Config = {
 export const DEFAULTS: Config = {
   journal: join(HOME, "code", "autoblog"), // replaced by `autoblog init` with ~/code/<you>-autoblog
   model: "opus",
+  linkModel: "sonnet",
   reflectEvery: 40,
   reflectEveryTurns: 6,
   idleMinutes: 20,

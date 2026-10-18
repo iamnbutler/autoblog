@@ -2,9 +2,10 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
-import { LOG_PATH, loadConfig } from "./config";
+import { LOG_PATH, loadConfig, REPO_ROOT } from "./config";
 import { archiveAll, commitLocked, ensureJournal, ensureProjectNote, findEntry, listEntries, projectFor, projectSummary, reviseEntry, TYPES, writeEntry, type EntryType } from "./journal";
 import { logDecision, readBar, sweep } from "./review";
+import { linkAfterWrite, linkDue, linkNamed } from "./link";
 import { checkpoint, type HookInput } from "./inband";
 import { readDelta } from "./transcripts";
 import { init, install, uninstall } from "./install";
@@ -18,13 +19,16 @@ Usage
                                     replace an entry's body (rewrite it whole; it's a living page);
                                     --project sets the project list, otherwise the current repo is added
   autoblog show <name>              print an entry, to revise it
-  autoblog ls [--notes|--posts] [-n 50]
-                                    entries, most recently updated first (names are for [[wikilinks]])
-  autoblog search <words...>        grep notes and posts
+  autoblog ls [--notes|--posts] [-n N]
+                                    entries, most recently updated first
+  autoblog search <words...>        grep notes and posts (check before writing a new topic)
+  autoblog link [name...] [--due] [--dry-run]
+                                    add [[links]] between entries (runs after every write, and daily)
   autoblog project [name] [--summary "..."]
                                     show or set what a project is (its hub note)
   autoblog skip "<reason>"          record that a checkpoint found nothing worth writing
   autoblog bar                      print the bar for what is worth writing
+  autoblog guide                    print the how-to (the autoblog skill), for checkpoints and manual writes
   autoblog transcript <path.jsonl>  condensed, readable view of a Claude Code or Codex transcript
   autoblog log [-n 20]              recent auto-mode decisions, in-band and sweep (for tuning)
   autoblog sweep [--dry-run] [-v]   fallback: review idle transcripts no agent claimed in-band
@@ -206,6 +210,26 @@ async function main() {
     case "sweep": {
       const { values } = parseArgs({ args: rest, options: { "dry-run": { type: "boolean" }, verbose: { type: "boolean", short: "v" } } });
       await sweep(cfg, { dryRun: values["dry-run"], verbose: values.verbose || values["dry-run"] });
+      // Once a day, older entries pick up links to whatever was written since.
+      linkDue(cfg, { daily: true, dryRun: values["dry-run"] });
+      return;
+    }
+
+    case "guide": {
+      const skill = readFileSync(join(REPO_ROOT, "skill", "autoblog", "SKILL.md"), "utf8");
+      console.log(skill.replace(/^---\n[\s\S]*?\n---\n+/, ""));
+      return;
+    }
+
+    case "link": {
+      const { values, positionals } = parseArgs({
+        args: rest,
+        allowPositionals: true,
+        options: { due: { type: "boolean" }, "after-write": { type: "boolean" }, "dry-run": { type: "boolean" } },
+      });
+      if (values["after-write"]) return linkAfterWrite(cfg, positionals[0]);
+      const changed = values.due ? linkDue(cfg, { dryRun: values["dry-run"] }) : linkNamed(cfg, positionals, { dryRun: values["dry-run"] });
+      if (!values["dry-run"]) console.log(changed.length ? `linked ${changed.join(", ")}` : "no new links");
       return;
     }
 

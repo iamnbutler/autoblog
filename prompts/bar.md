@@ -57,7 +57,7 @@ Revising is for two things only:
 - **A factual inaccuracy.** Something the entry says is wrong, or no longer true. Fix that, and change nothing else.
 - **A very closely aligned addition to a note.** One new pitfall or fix that belongs on that exact page, where a reader looking up the topic would expect to find it. Keep the existing text. If the addition needs its own heading or more than a short paragraph, it's probably its own note.
 
-Never revise to extend a post, to bring a project post up to date, or to fold in loosely related material. New work on a project becomes new notes, a new post, both, or nothing. When we ship revision history in Next Cloud, for example, that doesn't revise "Next Cloud". It might be a note on how the revision storage works, or a post of its own if it's substantial, or neither. The new entry links the old one.
+Never revise to extend a post, to bring a project post up to date, or to fold in loosely related material. New work on a project becomes new notes, a new post, both, or nothing. When we ship revision history in Next Cloud, for example, that doesn't revise "Next Cloud". It might be a note on how the revision storage works, or a post of its own if it's substantial, or neither. The new entry mentions the old one by name, and the linker connects them.
 
 ## Name the topic first
 
@@ -77,5 +77,5 @@ The bad version of each is the incident used as the title, like "Sixty PRs shipp
 
 - Explain internal names the first time you use them, or don't use them.
 - Never include secrets, tokens, keys, or passwords. Write `<redacted>` instead.
-- The journal is an Obsidian vault. Link projects as `[[project]]` and related entries by their exact names, and don't invent links. Tags go in `--tags`. If a project has no description yet, add one with `--project-summary`.
+- Don't add `[[links]]` to other entries or projects; autoblog links them after you write. Name related topics plainly in the text. Projects go in `--project`, tags in `--tags`, and if a project has no description yet, add one with `--project-summary`.
 - Give every decision, including a skip, a one-sentence reason. Reasons are logged and used to tune this bar.

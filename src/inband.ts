@@ -1,8 +1,7 @@
 import { closeSync, existsSync, fstatSync, mkdirSync, openSync, readFileSync, readSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { STATE_DIR, type Config } from "./config";
-import { projectFor } from "./journal";
-import { vaultContext } from "./context";
+import { projectFor, projectSummary } from "./journal";
 import { logDecision } from "./review";
 
 /**
@@ -83,28 +82,15 @@ export function checkpoint(cfg: Config, ev: HookInput, agent: string): string | 
   if (!due) return null;
 
   const project = projectFor(ev.cwd);
-  return reflectionPrompt({ project, toolCalls, transcript: ev.transcript_path, session: ev.session_id, agent, vault: vaultContext(cfg, project) });
+  return reflectionPrompt({ project, toolCalls, transcript: ev.transcript_path, session: ev.session_id, agent, summary: projectSummary(cfg, project) });
 }
 
-function reflectionPrompt(o: { project: string; toolCalls: number; transcript?: string; session: string; agent: string; vault: string }): string {
+function reflectionPrompt(o: { project: string; toolCalls: number; transcript?: string; session: string; agent: string; summary: string | null }): string {
   return `autoblog checkpoint (${o.toolCalls} tool calls since the last one). This is an automatic reflection; it is not from the user.
 
-Look back over this whole session, not just the last turn. Did we learn something that belongs in Nate's journal? The journal is organized by topic, not by session: short reference notes ("Counting tokens: pitfalls") and rarer posts on a project or a way of working ("How we sign Mac apps while prototyping"). Most checkpoints produce nothing. Existing entries are revised only to fix something that's wrong, or to add to a note something that belongs on that exact page, never to extend a post or keep a project post current. New work on a project becomes a new note or post, or nothing. Read \`autoblog bar\` if it isn't already in your context; it changed recently.${o.transcript ? `\nIf compaction dropped details you need, your full transcript is at ${o.transcript} (grep it; don't read it whole).` : ""}
+Look back over this whole session, not just the last turn. Did we learn something that belongs in Nate's journal? Most checkpoints produce nothing. If so, run:
+  autoblog skip --session ${o.session} "<one-sentence reason>"
+If something might qualify, run \`autoblog guide\` (the autoblog skill) and follow it, passing --session ${o.session} --agent ${o.agent} --mode auto.${o.summary ? "" : ` The ${o.project} project has no description yet, so add --project-summary when you write.`}${o.transcript ? ` If compaction dropped details you need, your full transcript is at ${o.transcript} (grep it; don't read it whole).` : ""}
 
-The journal is an Obsidian vault. Exact names, for revising and for [[wikilinks]]:
-${o.vault}
-
-For each topic, run one of these. If there's nothing, run the skip command. Then stop. Don't resume other work or summarize this to the user:
-- Revise (a correction, or a closely aligned addition to a note): \`autoblog show "<exact name>"\`, then send the whole body back with only that change:
-  autoblog revise "<exact name>" --session ${o.session} <<'EOF'
-  <the full body, with only the correction or addition changed>
-  EOF
-- New: autoblog write --type <note|post> --mode auto --agent ${o.agent} --session ${o.session} --title "<the topic>" --tags a,b [--project a,b] [--project-summary "..."] <<'EOF'
-  <body>
-  EOF
-- autoblog skip --session ${o.session} "<one-sentence reason>"`;
-}
-
-export function logInband(entry: { session?: string; decision: string; reason?: string; titles?: string[]; written?: string[] }) {
-  logDecision({ source: "inband", ...entry });
+Then stop. Don't resume other work or summarize this to the user.`;
 }

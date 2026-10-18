@@ -14,11 +14,13 @@ This repo is the machinery. The journal lives in a separate private repo.
 **Auto (always on, in-band).** This mirrors the tail end of a `lane` lifecycle, where you reflect before landing. The agent doing the work decides what's worth writing, because only it has the whole context, including the thing from day one of a multi-day session that turned out to matter on day three.
 
 - A `Stop` hook (Claude Code and Codex) counts tool calls since the session's last checkpoint. It reads only the bytes appended since then, so it costs nothing on a 40MB transcript. Once `reflectEvery` (40) calls pile up, the hook asks the agent to reflect before it stops.
-- The agent reads the bar (`autoblog bar`, i.e. [`prompts/bar.md`](prompts/bar.md)), looks back over the whole session, and then revises an entry (`autoblog show` and `autoblog revise`), writes a new one (`autoblog write --type note|post`), or skips (`autoblog skip "<reason>"`). Most checkpoints end in a skip.
+- The prompt is a few lines: skip by default, or run `autoblog guide` (the skill) if something might qualify. Following it, the agent reads the bar (`autoblog bar`, i.e. [`prompts/bar.md`](prompts/bar.md)), searches the journal for its topic, and then revises an entry (`autoblog show` and `autoblog revise`), writes a new one (`autoblog write --type note|post`), or skips (`autoblog skip "<reason>"`). Most checkpoints end in a skip.
 - Checkpoints come every chunk of work, so each chunk is reflected on while it's still in context. The prompt also gives the agent its own transcript path, so it can grep details that compaction dropped.
 - The decision and its reason are logged to `~/.autoblog/decisions.jsonl`. `autoblog log` shows them; tune `prompts/bar.md` on real misses.
 
 **Fallback sweep.** For transcripts no hook ever claimed (sessions from before install, or harnesses without hooks), a launchd job runs every 20 minutes. It hands idle transcripts to `claude -p` (`model`, default `opus`) with [`prompts/review.md`](prompts/review.md) plus the same bar. It sees only a condensed transcript, so it's second best.
+
+**Links.** Writers don't add `[[links]]`. After every write or revise, a background `autoblog link` asks `claude -p` (`linkModel`, default `sonnet`) which phrases in the entry name another entry or a project, and code links the first mention of each, so prose is never rewritten. Links to names that don't exist are unlinked. Once a day the sweep relinks entries whose text changed, and offers every other entry only the names that appeared since, so older entries link forward to newer ones. Then the site redeploys.
 
 **Manual.** `/autoblog`, `/autoblog <topic>`, or "write up an autoblog for this", in any agent that loads skills.
 
@@ -115,4 +117,4 @@ To put Cloudflare Access (SSO) in front instead, enable Zero Trust on the accoun
 
 ## Cost
 
-In-band reflection is one extra step for the agent you're already running, and most checkpoints end in a one-line skip. The fallback sweep makes one `claude -p` call per orphaned idle transcript.
+In-band reflection is one extra step for the agent you're already running, and most checkpoints end in a one-line skip. The fallback sweep makes one `claude -p` call per orphaned idle transcript, and the linker one small call per write, plus a daily pass over entries with something new to link.

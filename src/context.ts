@@ -2,7 +2,7 @@ import { basename } from "node:path";
 import type { Config } from "./config";
 import { listEntries, projectSummary, type EntryMeta } from "./journal";
 
-/** What a writer needs: the project's description, and every entry it might revise or link. */
+/** For the fallback reviewer, which has no tools: the project's description, and every entry, so it doesn't duplicate one. */
 export function vaultContext(cfg: Config, project: string): string {
   const entries = listEntries(cfg);
   const touches = (e: EntryMeta) => e.projects.some((p) => p.toLowerCase() === project.toLowerCase());
