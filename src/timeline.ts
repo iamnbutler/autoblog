@@ -100,6 +100,7 @@ const oneLine = (s: string) => s.replace(/\s+/g, " ").trim();
 export function timelinePass(cfg: Config, opts: { only?: string[]; dryRun?: boolean; verbose?: boolean } = {}): number {
   ensureJournal(cfg);
   const state = loadState();
+  const start = { ...state };
   const now = Date.now();
   const only = new Set((opts.only ?? []).map((p) => resolve(p)));
   const say = (m: string) => opts.verbose && console.error(m);
@@ -156,7 +157,8 @@ export function timelinePass(cfg: Config, opts: { only?: string[]; dryRun?: bool
     // A failed model call leaves the transcript where it was, to retry next sweep.
     if (ok && !opts.dryRun) state[t.path] = total;
   }
-  if (!opts.dryRun) saveState(state);
+  // Merge into what's on disk now, so parallel backfills don't drop each other's progress.
+  if (!opts.dryRun) withLock(cfg, () => saveState({ ...loadState(), ...Object.fromEntries(Object.entries(state).filter(([k, v]) => start[k] !== v)) }));
   if (added) withLock(cfg, () => commit(cfg, `timeline: ${added} line${added === 1 ? "" : "s"}`));
   return added;
 }
