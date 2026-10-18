@@ -24,8 +24,6 @@ export type Config = {
   idleMinutes: number;
   /** Deltas with fewer tool calls than this are skipped without calling the model. */
   minToolCalls: number;
-  /** Posts rated below this signal (1-3) are logged but not written. */
-  minSignal: number;
   /** On first sight, transcripts older than this are marked seen instead of backfilled. */
   lookbackHours: number;
   /** Condensed transcript budget sent to the reviewer, in characters. */
@@ -45,7 +43,6 @@ export const DEFAULTS: Config = {
   reflectEveryTurns: 6,
   idleMinutes: 20,
   minToolCalls: 8,
-  minSignal: 1,
   lookbackHours: 24,
   maxChars: 120_000,
   sources: ["claude", "codex"],

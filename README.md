@@ -1,8 +1,11 @@
 # autoblog
 
-An effortless, private engineering journal written by your coding agents.
+An effortless, private engineering journal written by your coding agents, organized by topic.
 
-Agents notice when something you did was worth remembering (a non-obvious fix, a novel solution, a procedure you keep repeating, a decision and its why) and write it up as a Markdown post in a **private** repo. Nobody has to read it front to back. It's a searchable firehose for "how did we do X again?", and you can pull the jewels out later.
+Agents notice when something we did belongs in the journal and write it to a **private** repo. The journal is organized by topic, not by session:
+
+- **Notes** are short reference pages that stay current, like "Counting tokens: pitfalls". A new pitfall revises the note; it doesn't become a new entry.
+- **Posts** are rarer pieces you could publish with light editing: a project, or a way of working ("How we sign Mac apps while prototyping").
 
 This repo is the machinery. The journal lives in a separate private repo.
 
@@ -11,7 +14,7 @@ This repo is the machinery. The journal lives in a separate private repo.
 **Auto (always on, in-band).** This mirrors the tail end of a `lane` lifecycle, where you reflect before landing. The agent doing the work decides what's worth writing, because only it has the whole context, including the thing from day one of a multi-day session that turned out to matter on day three.
 
 - A `Stop` hook (Claude Code and Codex) counts tool calls since the session's last checkpoint. It reads only the bytes appended since then, so it costs nothing on a 40MB transcript. Once `reflectEvery` (40) calls pile up, the hook asks the agent to reflect before it stops.
-- The agent reads the bar (`autoblog bar`, i.e. [`prompts/bar.md`](prompts/bar.md)), looks back over the whole session, and does exactly one thing: `autoblog write`, `autoblog update <post>`, or `autoblog skip "<reason>"`. Most checkpoints end in a skip.
+- The agent reads the bar (`autoblog bar`, i.e. [`prompts/bar.md`](prompts/bar.md)), looks back over the whole session, and then revises an entry (`autoblog show` and `autoblog revise`), writes a new one (`autoblog write --type note|post`), or skips (`autoblog skip "<reason>"`). Most checkpoints end in a skip.
 - Checkpoints come every chunk of work, so each chunk is reflected on while it's still in context. The prompt also gives the agent its own transcript path, so it can grep details that compaction dropped.
 - The decision and its reason are logged to `~/.autoblog/decisions.jsonl`. `autoblog log` shows them; tune `prompts/bar.md` on real misses.
 
@@ -19,9 +22,14 @@ This repo is the machinery. The journal lives in a separate private repo.
 
 **Manual.** `/autoblog`, `/autoblog <topic>`, or "write up an autoblog for this", in any agent that loads skills.
 
-## What a post is
+## What goes in
 
-The bar is the product, so read [`prompts/bar.md`](prompts/bar.md). In short, a post is a **story worth telling**, written for you a year from now, having forgotten the project entirely. It's a short blog post: what the project is, what we were after, what got in the way, what turned out to be true, and the takeaway that outlives the project, with an optional `## Details` section of commands at the end. One gotcha with no story isn't a post. Each post gets a **signal**: 1 is narrow, 2 is a reusable lesson, 3 is a jewel. `autoblog ls --jewels` lists the 3s.
+The bar is the product, so read [`prompts/bar.md`](prompts/bar.md). In short:
+
+- Most checkpoints write nothing.
+- The most common useful outcome is a revision to an existing note.
+- New notes are occasional, and new posts are rare.
+- Titles name a topic you'd search for, never an incident. "Keeping long-running work alive when the screen locks", not "Sixty PRs shipped overnight against a locked screen were sixty unverified PRs".
 
 ## Wiring
 
@@ -45,12 +53,13 @@ git clone https://github.com/iamnbutler/autoblog ~/code/autoblog
 ## CLI
 
 ```
-autoblog write --title <t> [--kind k] [--tags a,b] [--signal 1-3] [--mode auto] < body.md
-autoblog update <title> < more.md  autoblog skip "<reason>"   autoblog bar
-autoblog notes                   autoblog project [name] [--summary "..."]
-autoblog init                    autoblog install            autoblog uninstall
-autoblog search <words...>       autoblog ls [--jewels]       autoblog log
+autoblog write --type note|post --title <topic> [--tags a,b] [--project a,b] < body.md
+autoblog revise <name> [--title new] < body.md    autoblog show <name>
+autoblog ls [--notes|--posts]    autoblog search <words...>   autoblog project [name] [--summary "..."]
+autoblog skip "<reason>"         autoblog bar                 autoblog log
+autoblog init                    autoblog install             autoblog uninstall
 autoblog sweep [--dry-run -v]    autoblog review <transcript.jsonl> [--dry-run]
+autoblog archive "<why>"         autoblog reindex             autoblog site setup|deploy|open|password
 ```
 
 ## Config
@@ -65,7 +74,6 @@ autoblog sweep [--dry-run -v]    autoblog review <transcript.jsonl> [--dry-run]
   "reflectEveryTurns": 6,
   "idleMinutes": 20,
   "minToolCalls": 8,
-  "minSignal": 1,
   "lookbackHours": 24,
   "maxChars": 120000,
   "sources": ["claude", "codex"],
@@ -78,15 +86,17 @@ autoblog sweep [--dry-run -v]    autoblog review <transcript.jsonl> [--dry-run]
 The journal is an Obsidian vault, whether or not you ever open it in Obsidian:
 
 ```
-posts/2026/Dev builds need one stable app identity, or macOS keeps re-asking for permissions.md
-projects/desktop-tools.md     # what the project is, plus a generated list of its posts
+notes/macOS permissions for dev builds.md      # a topic, revised in place
+posts/How we sign Mac apps while prototyping.md
+projects/desktop-tools.md     # what the project is, plus a generated list of what touches it
+archive/<date>/               # entries set aside by `autoblog archive` (hidden from Obsidian search)
 README.md                     # generated: what the vault is and where things live
 ```
 
-- **Note names are titles,** so `[[wikilinks]]` resolve.
-- **Each post** links its project note (`project: "[[desktop-tools]]"` and in the prose) and links related posts. The writer gets the exact names of existing notes to link to.
+- **Note names are titles,** so `[[wikilinks]]` resolve. Names are unique across notes and posts, so writing a topic that exists fails and points you at `revise`. Renaming with `revise --title` rewrites links across the vault.
+- **Each entry** lists the projects it draws on (`projects: ["[[luau]]", "[[desktop-tools]]"]`), so a cross-project note shows up on every one of them.
 - **Project notes** start with an agent-written description (`--project-summary`, or `autoblog project <name> --summary`), because a year from now you won't remember what the project was.
-- **Properties:** `title, date, project, kind, signal, tags, mode, agent, session, cwd`.
+- **Properties:** `title, type, created, updated, projects, tags, sessions, agent, mode`.
 
 Secrets are redacted on write: GitHub, Anthropic, OpenAI, Slack, AWS, and Google tokens, JWTs, private keys, and `*_TOKEN=` style assignments.
 
@@ -94,7 +104,7 @@ Secrets are redacted on write: GitHub, Anthropic, OpenAI, Slack, AWS, and Google
 
 GitHub Pages can't serve this: even from a private repo, a Pages site is public unless you're on Enterprise Cloud. So `autoblog site setup` deploys the vault to a **Cloudflare Worker behind HTTP basic auth** (`site/worker.js`). It fails closed: if no password is set, nothing is served. The password is generated into the Worker's secrets and your macOS Keychain (`autoblog site password`).
 
-The site keeps Obsidian's semantics. `[[wikilinks]]` resolve by note name, including `|alias` and `#heading`. Every post shows **Linked from** (its backlinks) and more from its project. There are project pages, tag pages, Obsidian callouts, and client-side search. After setup, every journal commit redeploys in the background.
+The site keeps Obsidian's semantics. `[[wikilinks]]` resolve by note name, including `|alias` and `#heading`. Every entry shows **Linked from** (its backlinks). There are project pages, tag pages, Obsidian callouts, and client-side search. After setup, every journal commit redeploys in the background.
 
 ```bash
 autoblog site setup [--worker name] [--user name] [--rotate]   # once

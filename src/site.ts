@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync
 import { basename, join } from "node:path";
 import { Marked, type TokenizerAndRendererExtension } from "marked";
 import type { Config } from "./config";
-import { listPosts, noteName, projectSummary, type PostMeta } from "./journal";
+import { listEntries, noteName, projectSummary, type EntryMeta } from "./journal";
 
 /*
  * Static site for the vault, with Obsidian semantics: [[wikilinks]] resolve by note name
@@ -12,11 +12,11 @@ import { listPosts, noteName, projectSummary, type PostMeta } from "./journal";
 
 type Note = {
   name: string; // note name = filename without .md
-  kind: "post" | "project";
+  kind: "note" | "post" | "project";
   url: string;
   title: string;
   body: string; // markdown, frontmatter stripped
-  meta?: PostMeta;
+  meta?: EntryMeta;
   links: Set<string>; // lowercased names this note links to
 };
 
@@ -39,18 +39,18 @@ function outgoing(md: string): Set<string> {
 
 function loadNotes(cfg: Config): Map<string, Note> {
   const notes = new Map<string, Note>();
-  for (const p of listPosts(cfg)) {
-    const name = basename(p.path, ".md");
-    const body = stripFront(readFileSync(join(cfg.journal, p.path), "utf8"));
+  for (const e of listEntries(cfg)) {
+    const name = basename(e.path, ".md");
+    const body = stripFront(readFileSync(join(cfg.journal, e.path), "utf8"));
     const links = outgoing(body);
-    links.add(p.project.toLowerCase()); // the project property is a link too
-    notes.set(name.toLowerCase(), { name, kind: "post", url: `/posts/${slug(name)}/`, title: p.title, body, meta: p, links });
+    for (const p of e.projects) links.add(p.toLowerCase()); // the projects property links too
+    notes.set(name.toLowerCase(), { name, kind: e.type, url: `/${e.type}s/${slug(name)}/`, title: e.title, body, meta: e, links });
   }
   const pdir = join(cfg.journal, "projects");
   for (const f of existsSync(pdir) ? readdirSync(pdir).filter((f) => f.endsWith(".md")) : []) {
     const name = basename(f, ".md");
     const raw = stripFront(readFileSync(join(pdir, f), "utf8"));
-    const body = raw.split(/\n## Posts\n/)[0];
+    const body = raw.split(/\n## [^\n]*\n+<!-- autoblog:/)[0];
     notes.set(name.toLowerCase(), { name, kind: "project", url: `/projects/${slug(name)}/`, title: name, body, links: outgoing(body) });
   }
   return notes;
@@ -87,11 +87,9 @@ function markdown(notes: Map<string, Note>) {
       .replace(/<blockquote>\s*<p>\[!(\w+)\][ \t]*([^\n<]*)/g, (_s, kind, title) => `<blockquote class="callout callout-${kind.toLowerCase()}"><p><strong class="callout-title">${title || kind}</strong><br>`);
 }
 
-const stars = (n: number) => `<span class="stars" title="signal ${n}">${"★".repeat(n)}<span class="dim">${"★".repeat(3 - n)}</span></span>`;
-
-function postRow(p: Note) {
-  const m = p.meta!;
-  return `<li><a href="${p.url}">${esc(p.title)}</a><span class="row-meta">${stars(m.signal)} · ${esc(m.project)} · ${m.kind} · ${m.date.slice(0, 10)}</span></li>`;
+function entryRow(e: Note) {
+  const m = e.meta!;
+  return `<li><a href="${e.url}">${esc(e.title)}</a><span class="row-meta">${m.type} · ${esc(m.projects.join(", "))} · ${m.updated.slice(0, 10)}</span></li>`;
 }
 
 function page(title: string, main: string, opts: { siteName: string; depth?: string } = { siteName: "autoblog" }) {
@@ -105,7 +103,7 @@ function page(title: string, main: string, opts: { siteName: string; depth?: str
 <link rel="stylesheet" href="/style.css">
 </head>
 <body>
-<header class="site"><a href="/" class="brand">${esc(opts.siteName)}</a><nav><a href="/">posts</a><a href="/projects/">projects</a><a href="/tags/">tags</a></nav></header>
+<header class="site"><a href="/" class="brand">${esc(opts.siteName)}</a><nav><a href="/projects/">projects</a><a href="/tags/">tags</a></nav></header>
 <main>
 ${main}
 </main>
@@ -118,10 +116,11 @@ export function buildSite(cfg: Config, out: string, siteName: string) {
   const notes = loadNotes(cfg);
   const render = markdown(notes);
   const all = [...notes.values()];
-  const posts = all.filter((n) => n.kind === "post").sort((a, b) => b.meta!.date.localeCompare(a.meta!.date));
+  const entries = all.filter((n) => n.kind !== "project").sort((a, b) => b.meta!.updated.localeCompare(a.meta!.updated));
   const projects = all.filter((n) => n.kind === "project").sort((a, b) => a.name.localeCompare(b.name));
+  const about = (pr: Note) => entries.filter((e) => e.meta!.projects.some((p) => p.toLowerCase() === pr.name.toLowerCase()));
   const backlinks = (n: Note) =>
-    all.filter((o) => o !== n && o.links.has(n.name.toLowerCase())).sort((a, b) => (b.meta?.date ?? "").localeCompare(a.meta?.date ?? ""));
+    all.filter((o) => o !== n && o.links.has(n.name.toLowerCase())).sort((a, b) => (b.meta?.updated ?? "").localeCompare(a.meta?.updated ?? ""));
 
   rmSync(out, { recursive: true, force: true });
   const emit = (url: string, html: string) => {
@@ -130,24 +129,27 @@ export function buildSite(cfg: Config, out: string, siteName: string) {
     writeFileSync(join(dir, "index.html"), html);
   };
   writeFileSync(join((mkdirSync(out, { recursive: true }), out), "style.css"), CSS);
+  const projectLink = (p: string) => {
+    const n = notes.get(p.toLowerCase());
+    return n ? `<a href="${n.url}">${esc(p)}</a>` : esc(p);
+  };
 
-  for (const p of posts) {
-    const m = p.meta!;
-    const proj = notes.get(m.project.toLowerCase());
-    const refs = backlinks(p);
-    const siblings = posts.filter((o) => o !== p && o.meta!.project === m.project).slice(0, 8);
+  for (const e of entries) {
+    const m = e.meta!;
+    const refs = backlinks(e);
+    const created = m.created.slice(0, 10), updated = m.updated.slice(0, 10);
     emit(
-      p.url,
+      e.url,
       page(
-        p.title,
+        e.title,
         `<article>
-<h1>${esc(p.title)}</h1>
-<p class="meta">${m.date.slice(0, 10)} · ${proj ? `<a href="${proj.url}">${esc(m.project)}</a>` : esc(m.project)} · ${m.kind} · ${stars(m.signal)}${m.tags.length ? ` · ${m.tags.map((t) => `<a class="tag" href="/tags/${slug(t)}/">#${esc(t)}</a>`).join(" ")}` : ""}</p>
-${render(p.body)}
+<p class="eyebrow">${m.type}</p>
+<h1>${esc(e.title)}</h1>
+<p class="meta">${m.projects.map(projectLink).join(", ")} · ${updated === created ? created : `updated ${updated}`}${m.tags.length ? ` · ${m.tags.map((t) => `<a class="tag" href="/tags/${slug(t)}/">#${esc(t)}</a>`).join(" ")}` : ""}</p>
+${render(e.body)}
 </article>
 <aside class="links">
-<section><h2>Linked from</h2>${refs.length ? `<ul>${refs.map((r) => `<li><a href="${r.url}">${esc(r.title)}</a>${r.kind === "project" ? ' <span class="row-meta">project</span>' : ""}</li>`).join("")}</ul>` : `<p class="empty">Nothing links here yet.</p>`}</section>
-${siblings.length ? `<section><h2>More from ${esc(m.project)}</h2><ul>${siblings.map(postRow).join("")}</ul></section>` : ""}
+<section><h2>Linked from</h2>${refs.length ? `<ul>${refs.map((r) => `<li><a href="${r.url}">${esc(r.title)}</a> <span class="row-meta">${r.kind}</span></li>`).join("")}</ul>` : `<p class="empty">Nothing links here yet.</p>`}</section>
 </aside>`,
         { siteName },
       ),
@@ -155,78 +157,75 @@ ${siblings.length ? `<section><h2>More from ${esc(m.project)}</h2><ul>${siblings
   }
 
   for (const pr of projects) {
-    const ps = posts.filter((p) => p.meta!.project.toLowerCase() === pr.name.toLowerCase());
-    const refs = backlinks(pr).filter((r) => r.kind !== "post" || !ps.includes(r));
+    const es = about(pr);
+    const refs = backlinks(pr).filter((r) => !es.includes(r));
+    const group = (kind: string, label: string) => {
+      const g = es.filter((e) => e.kind === kind);
+      return g.length ? `<section class="list"><h2>${label}</h2><ul class="posts">${g.map(entryRow).join("")}</ul></section>` : "";
+    };
     emit(
       pr.url,
       page(
         pr.name,
         `<article><p class="eyebrow">project</p><h1>${esc(pr.name)}</h1>${render(pr.body)}</article>
-<section class="list"><h2>Posts</h2><ul class="posts">${ps.map(postRow).join("")}</ul></section>
+${group("post", "Posts")}${group("note", "Notes")}${es.length ? "" : `<p class="empty">Nothing in the journal touches this project yet.</p>`}
 ${refs.length ? `<aside class="links"><section><h2>Also linked from</h2><ul>${refs.map((r) => `<li><a href="${r.url}">${esc(r.title)}</a></li>`).join("")}</ul></section></aside>` : ""}`,
         { siteName },
       ),
     );
   }
 
+  const active = projects.filter((pr) => about(pr).length);
   emit(
     "/projects/",
     page(
       "Projects",
-      `<h1>Projects</h1><ul class="projects">${projects
+      `<h1>Projects</h1>${active.length ? `<ul class="projects">${active
         .map((pr) => {
-          const n = posts.filter((p) => p.meta!.project.toLowerCase() === pr.name.toLowerCase()).length;
+          const n = about(pr).length;
           const summary = projectSummary(cfg, pr.name);
-          return `<li><a href="${pr.url}">${esc(pr.name)}</a> <span class="row-meta">${n} post${n === 1 ? "" : "s"}</span>${summary ? `<p>${esc(summary.split("\n")[0])}</p>` : ""}</li>`;
+          return `<li><a href="${pr.url}">${esc(pr.name)}</a> <span class="row-meta">${n} ${n === 1 ? "entry" : "entries"}</span>${summary ? `<p>${esc(summary.split("\n")[0])}</p>` : ""}</li>`;
         })
-        .join("")}</ul>`,
+        .join("")}</ul>` : `<p class="empty">No projects yet.</p>`}`,
       { siteName },
     ),
   );
 
   const tags = new Map<string, Note[]>();
-  for (const p of posts) for (const t of p.meta!.tags) tags.set(t, [...(tags.get(t) ?? []), p]);
-  for (const [t, ps] of tags) emit(`/tags/${slug(t)}/`, page(`#${t}`, `<h1>#${esc(t)}</h1><ul class="posts">${ps.map(postRow).join("")}</ul>`, { siteName }));
+  for (const e of entries) for (const t of e.meta!.tags) tags.set(t, [...(tags.get(t) ?? []), e]);
+  for (const [t, es] of tags) emit(`/tags/${slug(t)}/`, page(`#${t}`, `<h1>#${esc(t)}</h1><ul class="posts">${es.map(entryRow).join("")}</ul>`, { siteName }));
   emit(
     "/tags/",
     page(
       "Tags",
       `<h1>Tags</h1><p class="tags">${[...tags.entries()]
         .sort((a, b) => b[1].length - a[1].length)
-        .map(([t, ps]) => `<a class="tag" href="/tags/${slug(t)}/">#${esc(t)} <span class="dim">${ps.length}</span></a>`)
+        .map(([t, es]) => `<a class="tag" href="/tags/${slug(t)}/">#${esc(t)} <span class="dim">${es.length}</span></a>`)
         .join(" ")}</p>`,
       { siteName },
     ),
   );
 
-  // Home: search, jewels, then everything by month.
-  const jewels = posts.filter((p) => p.meta!.signal >= 3);
-  let month = "";
-  const byMonth = posts
-    .map((p) => {
-      const m = p.meta!.date.slice(0, 7);
-      const head = m !== month ? `${month ? "</ul>" : ""}<h3>${m}</h3><ul class="posts">` : "";
-      month = m;
-      return head + postRow(p);
-    })
-    .join("");
-  const searchIndex = posts.map((p) => ({ t: p.title, u: p.url, p: p.meta!.project, g: p.meta!.tags.join(" "), b: p.body.replace(/[#*`>\[\]_-]+/g, " ").replace(/\s+/g, " ").slice(0, 4000) }));
+  // Home: search, then posts, then notes, each most recently updated first.
+  const posts = entries.filter((e) => e.kind === "post");
+  const noteEntries = entries.filter((e) => e.kind === "note");
+  const searchIndex = entries.map((e) => ({ t: e.title, u: e.url, p: e.meta!.projects.join(" "), g: e.meta!.tags.join(" "), b: e.body.replace(/[#*`>\[\]_-]+/g, " ").replace(/\s+/g, " ").slice(0, 4000) }));
   writeFileSync(join(out, "search.json"), JSON.stringify(searchIndex));
   emit(
     "/",
     page(
       siteName,
-      `<input id="q" type="search" placeholder="Search posts…" autocomplete="off">
+      `<input id="q" type="search" placeholder="Search notes and posts…" autocomplete="off">
 <ul id="results" class="posts" hidden></ul>
 <div id="home">
-${jewels.length ? `<h2>Jewels</h2><ul class="posts">${jewels.map(postRow).join("")}</ul>` : ""}
-<h2>All posts</h2>${byMonth}${posts.length ? "</ul>" : "<p class=empty>No posts yet.</p>"}
+<h2>Posts</h2>${posts.length ? `<ul class="posts">${posts.map(entryRow).join("")}</ul>` : "<p class=empty>No posts yet.</p>"}
+<h2>Notes</h2>${noteEntries.length ? `<ul class="posts">${noteEntries.map(entryRow).join("")}</ul>` : "<p class=empty>No notes yet.</p>"}
 </div>
 <script>${SEARCH_JS}</script>`,
       { siteName },
     ),
   );
-  return { posts: posts.length, projects: projects.length, tags: tags.size };
+  return { notes: noteEntries.length, posts: posts.length, projects: active.length, tags: tags.size };
 }
 
 const SEARCH_JS = `
@@ -268,7 +267,7 @@ h3 { font-size: 1.1rem; margin: 1.8rem 0 0.4rem; }
 .meta, .row-meta, .eyebrow, .empty, aside, .tags, #q { font-family: var(--sans); }
 .meta { color: var(--muted); font-size: 14px; margin: 0 0 2rem; }
 .eyebrow { color: var(--muted); font-size: 13px; text-transform: uppercase; letter-spacing: 0.08em; margin: 2rem 0 -1rem; }
-.stars { color: var(--accent); letter-spacing: 0.05em; } .dim { opacity: 0.28; }
+.dim { opacity: 0.4; }
 .tag { text-decoration: none; font-family: var(--sans); font-size: 14px; }
 code { font: 0.86em/1.5 var(--mono); background: var(--code-bg); padding: 0.1em 0.3em; border-radius: 4px; }
 pre { background: var(--code-bg); padding: 1rem; border-radius: 8px; overflow-x: auto; font-size: 15px; }

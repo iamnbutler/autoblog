@@ -77,7 +77,7 @@ export function deploy(cfg: Config, quiet = false): boolean {
         return false;
       }
       rememberUrl(cfg, r.stdout);
-      if (!quiet) console.log(`deployed ${stats.posts} posts, ${stats.projects} projects -> ${siteUrl(cfg)}`);
+      if (!quiet) console.log(`deployed ${stats.notes} notes, ${stats.posts} posts -> ${siteUrl(cfg)}`);
     } while (existsSync(DIRTY));
     return true;
   } finally {

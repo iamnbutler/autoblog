@@ -1,26 +1,30 @@
-import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { basename, join, relative, resolve } from "node:path";
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { basename, dirname, join, relative, resolve } from "node:path";
 import { spawn, spawnSync } from "node:child_process";
 import type { Config } from "./config";
 import { redact } from "./redact";
 
 /*
  * The journal is an Obsidian vault, whether or not Obsidian ever opens it:
- *   posts/<year>/<Title>.md   one note per story; filename = title so [[Title]] resolves
- *   projects/<name>.md        hub note per project: what it is, plus every post about it
- *   README.md                 generated: what this vault is, nothing more
- * Properties are YAML frontmatter, and posts link with [[wikilinks]].
+ *   notes/<Topic>.md      short reference pages on a topic, revised in place as we learn more
+ *   posts/<Topic>.md      pieces Nate could publish: a project, or a way of working
+ *   projects/<name>.md    hub note per project: what it is, plus every entry that touches it
+ *   archive/<date>/       earlier entries, set aside; nothing reads them
+ *   README.md             generated: what this vault is, nothing more
+ * Note name = title, so [[Title]] resolves; names are unique across notes and posts.
  */
 
-export const KINDS = ["fix", "solution", "howto", "decision", "discovery", "kickoff", "note"] as const;
+export const TYPES = ["note", "post"] as const;
+export type EntryType = (typeof TYPES)[number];
+const DIRS: Record<EntryType, string> = { note: "notes", post: "posts" };
 
-export type PostInput = {
+export type EntryInput = {
+  type: EntryType;
   title: string;
   body: string;
-  kind?: string;
   tags?: string[];
-  signal?: number;
-  project?: string;
+  /** Projects this entry draws on; defaults to the one at cwd. */
+  projects?: string[];
   /** One to three sentences on what the project is; fills the project note if it has none yet. */
   projectSummary?: string;
   cwd?: string;
@@ -31,20 +35,20 @@ export type PostInput = {
   date?: string;
 };
 
-export type PostMeta = {
+export type EntryMeta = {
   path: string;
+  type: EntryType;
   title: string;
-  date: string;
-  project: string;
-  kind: string;
-  signal: number;
+  created: string;
+  updated: string;
+  projects: string[];
   tags: string[];
   mode: string;
 };
 
 const PLACEHOLDER = "_No description yet. The next agent to write about this project should add one to three sentences on what it is and why it exists._";
-const POSTS_START = "<!-- autoblog:posts (generated) -->";
-const POSTS_END = "<!-- /autoblog:posts -->";
+const LIST_START = "<!-- autoblog:entries (generated) -->";
+const LIST_END = "<!-- /autoblog:entries -->";
 
 export function tagify(s: string): string {
   return s.toLowerCase().replace(/[^a-z0-9/_-]+/g, "-").replace(/^-|-$/g, "");
@@ -111,67 +115,146 @@ function withLock<T>(cfg: Config, fn: () => T): T {
   }
 }
 
-export function writePost(cfg: Config, p: PostInput): string {
+export function writeEntry(cfg: Config, e: EntryInput): string {
   ensureJournal(cfg);
-  return withLock(cfg, () => writePostLocked(cfg, p));
+  return withLock(cfg, () => writeEntryLocked(cfg, e));
 }
 
-function writePostLocked(cfg: Config, p: PostInput): string {
-  const parsed = p.date ? new Date(p.date) : null;
-  const now = parsed && !isNaN(+parsed) ? parsed : new Date();
-  const dir = join(cfg.journal, "posts", String(now.getFullYear()));
+function writeEntryLocked(cfg: Config, e: EntryInput): string {
+  const name = noteName(e.title);
+  const existing = findEntry(cfg, name);
+  if (existing) throw new Error(`"${name}" already exists (${relative(cfg.journal, existing)}); revise it instead: autoblog revise "${name}"`);
+  const parsed = e.date ? new Date(e.date) : null;
+  const when = localStamp(parsed && !isNaN(+parsed) ? parsed : new Date());
+  const dir = join(cfg.journal, DIRS[e.type]);
   mkdirSync(dir, { recursive: true });
-  const name = noteName(p.title);
-  let file = join(dir, `${name}.md`);
-  for (let i = 2; existsSync(file); i++) file = join(dir, `${name} ${i}.md`);
+  const file = join(dir, `${name}.md`);
 
-  const project = noteName(p.project ?? projectFor(p.cwd));
-  ensureProjectNote(cfg, project, p.projectSummary);
-
-  const tags = [...new Set((p.tags ?? []).map(tagify).filter(Boolean))];
-  const front = [
-    "---",
-    `title: ${q(p.title)}`,
-    `date: ${localStamp(now)}`,
-    `project: ${q(`[[${project}]]`)}`,
-    `kind: ${p.kind && (KINDS as readonly string[]).includes(p.kind) ? p.kind : "note"}`,
-    `signal: ${Math.min(3, Math.max(1, p.signal ?? 2))}`,
-    tags.length ? `tags:\n${tags.map((t) => `  - ${t}`).join("\n")}` : "tags: []",
-    `mode: ${p.mode}`,
-    p.agent ? `agent: ${p.agent}` : null,
-    p.session ? `session: ${p.session}` : null,
-    p.cwd ? `cwd: ${q(p.cwd)}` : null,
-    "---",
-    "",
-  ].filter((l) => l !== null);
-
-  // Obsidian shows the filename as the title, so drop a leading H1.
-  const body = p.body.trim().replace(/^#\s+.*\n+/, "");
-  writeFileSync(file, redact(`${front.join("\n")}${normalizeLinks(body)}\n`));
-  commit(cfg, `${p.mode}: ${p.title}`);
+  const projects = projectsFor(e);
+  for (const p of projects) ensureProjectNote(cfg, p, projects.length === 1 ? e.projectSummary : undefined);
+  const front: Front = {
+    title: e.title,
+    type: e.type,
+    created: when,
+    updated: when,
+    projects: projects.map((p) => `[[${p}]]`),
+    tags: [...new Set((e.tags ?? []).map(tagify).filter(Boolean))],
+    sessions: e.session ? [e.session] : [],
+    agent: e.agent ?? "",
+    mode: e.mode,
+  };
+  writeFileSync(file, redact(serialize(front, e.body)));
+  commit(cfg, `${e.mode}: ${e.type} ${name}`);
   return file;
 }
 
-/** Find a post by journal-relative path, title, or [[wikilink]]. */
-export function findPost(cfg: Config, ref: string): string | null {
+export type Revision = {
+  /** The whole new body; the entry should read as one current page, not a log. */
+  body?: string;
+  /** Text to add at the end instead (the fallback reviewer can't see the current body). */
+  append?: string;
+  title?: string;
+  tags?: string[];
+  projects?: string[];
+  cwd?: string;
+  session?: string;
+  agent?: string;
+};
+
+/** Revise an entry in place: new body (or an addition), merged projects, tags and sessions, a new `updated`. */
+export function reviseEntry(cfg: Config, ref: string, r: Revision): string | null {
+  ensureJournal(cfg);
+  return withLock(cfg, () => {
+    let file = findEntry(cfg, ref);
+    if (!file) return null;
+    const { front, body } = parseFile(readFileSync(file, "utf8"));
+    const projects = [...new Set([...listOf(front.projects), ...projectsFor({ projects: r.projects, cwd: r.cwd }).map((p) => `[[${p}]]`)])];
+    for (const p of projects) ensureProjectNote(cfg, unlink(p));
+    const next: Front = {
+      ...front,
+      updated: localStamp(new Date()),
+      projects,
+      tags: [...new Set([...listOf(front.tags), ...(r.tags ?? []).map(tagify).filter(Boolean)])],
+      sessions: [...new Set([...listOf(front.sessions), ...(r.session ? [r.session] : [])])],
+    };
+    if (r.agent) next.agent = r.agent;
+    let text = r.body?.trim() ? r.body : r.append?.trim() ? `${body.trimEnd()}\n\n${r.append.trim()}` : body;
+    const oldName = basename(file, ".md");
+    if (r.title && noteName(r.title) !== oldName) {
+      const name = noteName(r.title);
+      if (findEntry(cfg, name)) throw new Error(`"${name}" already exists`);
+      next.title = r.title;
+      const moved = join(dirname(file), `${name}.md`);
+      rmSync(file);
+      file = moved;
+      relink(cfg, oldName, name);
+    }
+    writeFileSync(file, redact(serialize(next, text)));
+    commit(cfg, `revise: ${basename(file, ".md")}`);
+    return file;
+  });
+}
+
+/** Point every [[Old name]] in the vault at the new name. */
+function relink(cfg: Config, from: string, to: string) {
+  const re = new RegExp(`\\[\\[${from.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?=[\\]|#])`, "gi");
+  for (const f of vaultFiles(cfg)) {
+    const t = readFileSync(f, "utf8");
+    const n = t.replace(re, `[[${to}`);
+    if (n !== t) writeFileSync(f, n);
+  }
+}
+
+/** Set aside every note and post under archive/<date>/, so the journal starts over. */
+export function archiveAll(cfg: Config, reason: string): number {
+  ensureJournal(cfg);
+  return withLock(cfg, () => {
+    const dest = join(cfg.journal, "archive", localStamp(new Date()).slice(0, 10));
+    let n = 0;
+    for (const d of ["notes", "posts"]) {
+      const src = join(cfg.journal, d);
+      if (!existsSync(src)) continue;
+      n += walk(src).filter((f) => f.endsWith(".md")).length;
+      mkdirSync(dest, { recursive: true });
+      renameSync(src, join(dest, d));
+    }
+    if (n) {
+      hideArchiveInObsidian(cfg);
+      writeFileSync(join(dest, "README.md"), `Archived ${n} entries on ${localStamp(new Date()).slice(0, 10)}.\n\n${reason.trim()}\n`);
+      commit(cfg, `archive ${n} entries`);
+    }
+    return n;
+  });
+}
+
+/** Keep archived entries out of Obsidian's search, graph and backlinks ("Excluded files"). */
+function hideArchiveInObsidian(cfg: Config) {
+  const file = join(cfg.journal, ".obsidian", "app.json");
+  let app: { userIgnoreFilters?: string[] } = {};
+  try {
+    app = JSON.parse(readFileSync(file, "utf8"));
+  } catch {}
+  if (app.userIgnoreFilters?.includes("archive/")) return;
+  mkdirSync(dirname(file), { recursive: true });
+  writeFileSync(file, JSON.stringify({ ...app, userIgnoreFilters: [...(app.userIgnoreFilters ?? []), "archive/"] }, null, 2) + "\n");
+}
+
+/** Find a note or post by journal-relative path, title, or [[wikilink]]. */
+export function findEntry(cfg: Config, ref: string): string | null {
   const direct = resolve(cfg.journal, ref);
-  if (direct.startsWith(resolve(cfg.journal, "posts") + "/") && existsSync(direct)) return direct;
+  if (TYPES.some((t) => direct.startsWith(resolve(cfg.journal, DIRS[t]) + "/")) && existsSync(direct)) return direct;
   const want = noteName(ref.replace(/^\[\[|\]\]$/g, "").replace(/\.md$/, "")).toLowerCase();
-  const hit = listPosts(cfg).find((p) => noteName(p.title).toLowerCase() === want || basename(p.path, ".md").toLowerCase() === want);
+  const hit = listEntries(cfg).find((e) => basename(e.path, ".md").toLowerCase() === want || noteName(e.title).toLowerCase() === want);
   return hit ? join(cfg.journal, hit.path) : null;
 }
 
-export function appendUpdate(cfg: Config, ref: string, body: string, session?: string): string | null {
-  return withLock(cfg, () => appendUpdateLocked(cfg, ref, body, session));
+function projectsFor(e: { projects?: string[]; cwd?: string }): string[] {
+  const named = (e.projects ?? []).map((p) => noteName(unlink(p.trim()))).filter((p) => p && p !== "Untitled");
+  return named.length ? [...new Set(named)] : e.cwd ? [noteName(projectFor(e.cwd))] : [];
 }
 
-function appendUpdateLocked(cfg: Config, ref: string, body: string, session?: string): string | null {
-  const file = findPost(cfg, ref);
-  if (!file) return null;
-  appendFileSync(file, redact(`\n## Update ${localStamp(new Date()).slice(0, 10)}${session ? ` (${session.slice(0, 8)})` : ""}\n\n${normalizeLinks(body.trim())}\n`));
-  commit(cfg, `update: ${basename(file, ".md")}`);
-  return file;
-}
+const unlink = (s: string) => s.replace(/^\[\[|\]\]$/g, "");
+const listOf = (v: unknown): string[] => (Array.isArray(v) ? v : typeof v === "string" && v ? [v] : []);
 
 function projectNotePath(cfg: Config, project: string) {
   return join(cfg.journal, "projects", `${noteName(project)}.md`);
@@ -182,14 +265,14 @@ export function ensureProjectNote(cfg: Config, project: string, summary?: string
   const file = projectNotePath(cfg, project);
   mkdirSync(join(cfg.journal, "projects"), { recursive: true });
   if (!existsSync(file)) {
-    writeFileSync(file, `---\ntype: project\n---\n${summary?.trim() || PLACEHOLDER}\n\n## Posts\n\n${POSTS_START}\n${POSTS_END}\n`);
+    writeFileSync(file, `---\ntype: project\n---\n${summary?.trim() || PLACEHOLDER}\n\n## In the journal\n\n${LIST_START}\n${LIST_END}\n`);
     return;
   }
   if (!summary?.trim()) return;
   const text = readFileSync(file, "utf8");
   if (text.includes(PLACEHOLDER)) writeFileSync(file, text.replace(PLACEHOLDER, summary.trim()));
   else if (replace) {
-    const m = text.match(/^(---\n[\s\S]*?\n---\n)([\s\S]*?)(\n## Posts[\s\S]*)$/);
+    const m = text.match(/^(---\n[\s\S]*?\n---\n)([\s\S]*?)(\n## [^\n]*\n+<!-- autoblog:[\s\S]*)$/);
     if (m) writeFileSync(file, `${m[1]}${summary.trim()}\n${m[3]}`);
   }
 }
@@ -197,7 +280,10 @@ export function ensureProjectNote(cfg: Config, project: string, summary?: string
 export function projectSummary(cfg: Config, project: string): string | null {
   const file = projectNotePath(cfg, project);
   if (!existsSync(file)) return null;
-  const body = readFileSync(file, "utf8").replace(/^---\n[\s\S]*?\n---\n/, "").split("\n## Posts")[0].trim();
+  const body = readFileSync(file, "utf8")
+    .replace(/^---\n[\s\S]*?\n---\n/, "")
+    .split(/\n## [^\n]*\n+<!-- autoblog:/)[0]
+    .trim();
   return body === PLACEHOLDER ? null : body;
 }
 
@@ -229,91 +315,124 @@ export function commit(cfg: Config, message: string) {
   }
 }
 
-export function listPosts(cfg: Config): PostMeta[] {
-  const root = join(cfg.journal, "posts");
-  if (!existsSync(root)) return [];
-  const out: PostMeta[] = [];
-  const walk = (d: string) => {
-    for (const e of readdirSync(d)) {
-      const p = join(d, e);
-      if (statSync(p).isDirectory()) walk(p);
-      else if (e.endsWith(".md")) {
-        const m = parseFront(readFileSync(p, "utf8"));
-        const str = (k: string) => (typeof m[k] === "string" ? (m[k] as string) : "");
-        out.push({
-          path: relative(cfg.journal, p),
-          title: str("title") || basename(e, ".md"),
-          date: str("date"),
-          project: str("project").replace(/^\[\[|\]\]$/g, ""),
-          kind: str("kind") || "note",
-          signal: Number(str("signal") || 1),
-          tags: Array.isArray(m.tags) ? m.tags : [],
-          mode: str("mode"),
-        });
-      }
+function walk(d: string): string[] {
+  return readdirSync(d).flatMap((e) => {
+    const p = join(d, e);
+    return statSync(p).isDirectory() ? walk(p) : [p];
+  });
+}
+
+/** Every Markdown file in the vault outside .git and the archive. */
+function vaultFiles(cfg: Config): string[] {
+  return ["notes", "posts", "projects"].flatMap((d) => (existsSync(join(cfg.journal, d)) ? walk(join(cfg.journal, d)) : [])).filter((f) => f.endsWith(".md"));
+}
+
+export function listEntries(cfg: Config, type?: EntryType): EntryMeta[] {
+  const out: EntryMeta[] = [];
+  for (const t of type ? [type] : TYPES) {
+    const root = join(cfg.journal, DIRS[t]);
+    if (!existsSync(root)) continue;
+    for (const p of walk(root).filter((f) => f.endsWith(".md"))) {
+      const { front } = parseFile(readFileSync(p, "utf8"));
+      const str = (k: string) => (typeof front[k] === "string" ? (front[k] as string) : "");
+      out.push({
+        path: relative(cfg.journal, p),
+        type: t,
+        title: str("title") || basename(p, ".md"),
+        created: str("created"),
+        updated: str("updated") || str("created"),
+        projects: listOf(front.projects).map(unlink),
+        tags: listOf(front.tags),
+        mode: str("mode"),
+      });
     }
-  };
-  walk(root);
-  return out.sort((a, b) => b.date.localeCompare(a.date));
+  }
+  return out.sort((a, b) => b.updated.localeCompare(a.updated));
+}
+
+type Front = Record<string, string | string[]>;
+
+function serialize(front: Front, body: string): string {
+  const lines = ["---"];
+  for (const [k, v] of Object.entries(front)) {
+    if (Array.isArray(v)) lines.push(v.length ? `${k}:\n${v.map((x) => `  - ${/^[\w./-]+$/.test(x) ? x : q(x)}`).join("\n")}` : `${k}: []`);
+    else if (v !== "") lines.push(`${k}: ${k === "title" || /: |#|^[\[\]"{}&*!>|%@`]/.test(v) ? q(v) : v}`);
+  }
+  // Obsidian shows the filename as the title, so drop a leading H1.
+  const text = body.trim().replace(/^#\s+.*\n+/, "");
+  return `${lines.join("\n")}\n---\n\n${normalizeLinks(text)}\n`;
+}
+
+function parseFile(text: string): { front: Front; body: string } {
+  const m = text.match(/^---\n([\s\S]*?)\n---\n?/);
+  return { front: m ? parseFront(m[1]) : {}, body: m ? text.slice(m[0].length).replace(/^\n+/, "") : text };
 }
 
 /** Just enough YAML for our own frontmatter: scalars, quoted strings, and block or flow lists. */
-function parseFront(text: string): Record<string, string | string[]> {
-  const m = text.match(/^---\n([\s\S]*?)\n---/);
-  const out: Record<string, string | string[]> = {};
-  if (!m) return out;
+function parseFront(yaml: string): Front {
+  const out: Front = {};
   let last = "";
-  for (const line of m[1].split("\n")) {
+  const unq = (v: string) => {
+    if (v.startsWith('"')) {
+      try {
+        return JSON.parse(v);
+      } catch {}
+    }
+    return v;
+  };
+  for (const line of yaml.split("\n")) {
     const item = line.match(/^\s+-\s+(.*)$/);
     if (item && last) {
       (out[last] = Array.isArray(out[last]) ? out[last] : []) as string[];
-      (out[last] as string[]).push(item[1].trim());
+      (out[last] as string[]).push(unq(item[1].trim()));
       continue;
     }
     const i = line.indexOf(":");
     if (i < 0) continue;
     last = line.slice(0, i).trim();
-    let v = line.slice(i + 1).trim();
+    const v = line.slice(i + 1).trim();
     if (v.startsWith("[") && v.endsWith("]")) {
-      out[last] = v.slice(1, -1).split(",").map((t) => t.trim()).filter(Boolean);
+      out[last] = v.slice(1, -1).split(",").map((t) => unq(t.trim())).filter(Boolean);
       continue;
     }
-    if (v.startsWith('"')) {
-      try {
-        v = JSON.parse(v);
-      } catch {}
-    }
-    out[last] = v;
+    out[last] = unq(v);
   }
   return out;
 }
 
-/** Markdown link that works on GitHub and in Obsidian. */
-const mdLink = (title: string, path: string) => `[${title}](${path.split("/").map(encodeURIComponent).join("/")})`;
-
-/** Rebuild generated parts: each project note's post list, and the short README. */
+/** Rebuild generated parts: each project note's entry list, and the short README. */
 function regenerate(cfg: Config) {
-  const posts = listPosts(cfg);
-  const byProject = new Map<string, PostMeta[]>();
-  for (const p of posts) byProject.set(p.project, [...(byProject.get(p.project) ?? []), p]);
-
-  for (const [project, ps] of byProject) {
-    ensureProjectNote(cfg, project);
+  const entries = listEntries(cfg);
+  const pdir = join(cfg.journal, "projects");
+  const projects = existsSync(pdir) ? readdirSync(pdir).filter((f) => f.endsWith(".md")).map((f) => basename(f, ".md")) : [];
+  for (const project of projects) {
     const file = projectNotePath(cfg, project);
     const text = readFileSync(file, "utf8");
-    const list = ps.map((p) => `- [[${basename(p.path, ".md")}]] · ${p.date.slice(0, 10)} · ${p.kind}`).join("\n");
-    const block = `${POSTS_START}\n${list}\n${POSTS_END}`;
-    const next = text.includes(POSTS_START) ? text.slice(0, text.indexOf(POSTS_START)) + block + text.slice(text.indexOf(POSTS_END) + POSTS_END.length) : `${text.trimEnd()}\n\n## Posts\n\n${block}\n`;
+    const mine = entries.filter((e) => e.projects.some((p) => p.toLowerCase() === project.toLowerCase()));
+    const list = (t: EntryType, label: string) => {
+      const es = mine.filter((e) => e.type === t).sort((a, b) => a.title.localeCompare(b.title));
+      return es.length ? [`${label}:`, ...es.map((e) => `- [[${basename(e.path, ".md")}]]`), ""] : [];
+    };
+    const block = [LIST_START, ...list("post", "Posts"), ...list("note", "Notes"), LIST_END].join("\n");
+    const at = text.search(/<!-- autoblog:(entries|posts) \(generated\) -->/);
+    const endMatch = text.match(/<!-- \/autoblog:(entries|posts) -->/);
+    let next: string;
+    if (at >= 0 && endMatch) {
+      const before = text.slice(0, at).replace(/## Posts\n+$/, "## In the journal\n\n");
+      next = before + block + text.slice(text.indexOf(endMatch[0]) + endMatch[0].length);
+    } else next = `${text.trimEnd()}\n\n## In the journal\n\n${block}\n`;
     if (next !== text) writeFileSync(file, next);
   }
 
   const lines = [
     "# autoblog",
     "",
-    "A private blog written by agents as we work, via [autoblog](https://github.com/iamnbutler/autoblog). It's an Obsidian vault: open this folder in Obsidian for backlinks and the graph.",
+    "A private journal written by agents as we work, via [autoblog](https://github.com/iamnbutler/autoblog). It's an Obsidian vault: open this folder in Obsidian for backlinks and the graph.",
     "",
-    "- `posts/<year>/`: one note per story",
-    "- `projects/`: what each project is, and its posts",
+    "- `notes/`: short reference pages on a topic, kept current",
+    "- `posts/`: longer pieces on a project or a way of working",
+    "- `projects/`: what each project is, and what touches it",
+    "- `archive/`: earlier entries, set aside",
     ...(cfg.site?.url ? [`- ${cfg.site.url}: the private site`] : []),
   ];
   writeFileSync(join(cfg.journal, "README.md"), lines.join("\n") + "\n");

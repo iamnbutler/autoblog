@@ -89,17 +89,18 @@ export function checkpoint(cfg: Config, ev: HookInput, agent: string): string | 
 function reflectionPrompt(o: { project: string; toolCalls: number; transcript?: string; session: string; agent: string; vault: string }): string {
   return `autoblog checkpoint (${o.toolCalls} tool calls since the last one). This is an automatic reflection; it is not from the user.
 
-Look back over this whole session, not just the last turn, and find the stories worth a post on Nate's private blog: things we figured out, built, decided, or learned that he'd want to read a year from now, having forgotten this project entirely. Judge each story on its own. Often there are none, and sometimes there are several; write one post per story. The bar and the writing style are in \`autoblog bar\`. Read it if it isn't already in your context; it changed recently.${o.transcript ? `\nIf compaction dropped details you need, your full transcript is at ${o.transcript} (grep it; don't read it whole).` : ""}
+Look back over this whole session, not just the last turn. Did we learn something that belongs in Nate's journal? The journal is organized by topic, not by session: short reference notes ("Counting tokens: pitfalls") and rarer posts on a project or a way of working ("How we sign Mac apps while prototyping"). Most checkpoints produce nothing. The most common useful outcome is revising a note that already covers the topic. Read \`autoblog bar\` if it isn't already in your context; it changed recently.${o.transcript ? `\nIf compaction dropped details you need, your full transcript is at ${o.transcript} (grep it; don't read it whole).` : ""}
 
-The blog is an Obsidian vault. Link the project and related posts with [[wikilinks]], using exact note names:
+The journal is an Obsidian vault. Exact names, for revising and for [[wikilinks]]:
 ${o.vault}
 
-For each story, run one of these. If there are none, run the skip command. Then stop. Don't resume other work or summarize this to the user:
-- autoblog write --mode auto --agent ${o.agent} --session ${o.session} --title "..." --kind <fix|solution|howto|decision|discovery|kickoff> --tags a,b --signal <1-3> [--project-summary "..."] <<'EOF'
-  <body>
+For each topic, run one of these. If there's nothing, run the skip command. Then stop. Don't resume other work or summarize this to the user:
+- Revise: \`autoblog show "<exact name>"\`, then rewrite the whole body so it reads as one current page:
+  autoblog revise "<exact name>" --session ${o.session} <<'EOF'
+  <the full revised body>
   EOF
-- autoblog update "<exact post title>" --session ${o.session} <<'EOF'
-  <what's new>
+- New: autoblog write --type <note|post> --mode auto --agent ${o.agent} --session ${o.session} --title "<the topic>" --tags a,b [--project a,b] [--project-summary "..."] <<'EOF'
+  <body>
   EOF
 - autoblog skip --session ${o.session} "<one-sentence reason>"`;
 }

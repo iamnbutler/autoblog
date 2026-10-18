@@ -1,13 +1,13 @@
 import { basename } from "node:path";
 import type { Config } from "./config";
-import { listPosts, projectSummary } from "./journal";
+import { listEntries, projectSummary, type EntryMeta } from "./journal";
 
-/** What a writer needs to place a post in the vault: the project's description and linkable note names. */
+/** What a writer needs: the project's description, and every entry it might revise or link. */
 export function vaultContext(cfg: Config, project: string): string {
-  const posts = listPosts(cfg);
-  const mine = posts.filter((p) => p.project === project).slice(0, 30);
-  const others = posts.filter((p) => p.project !== project).slice(0, 30);
-  const names = (ps: typeof posts) => (ps.length ? ps.map((p) => `  - [[${basename(p.path, ".md")}]]`).join("\n") : "  (none yet)");
+  const entries = listEntries(cfg);
+  const touches = (e: EntryMeta) => e.projects.some((p) => p.toLowerCase() === project.toLowerCase());
+  const row = (e: EntryMeta) => `  - [[${basename(e.path, ".md")}]]${touches(e) ? `  (${project})` : ""}`;
+  const section = (label: string, es: EntryMeta[]) => [label, ...(es.length ? es.map(row) : ["  (none yet)"])];
   const summary = projectSummary(cfg, project);
   return [
     `Project note: [[${project}]]`,
@@ -15,10 +15,8 @@ export function vaultContext(cfg: Config, project: string): string {
       ? `  What it is: ${summary.replace(/\n+/g, " ")}`
       : `  It has no description yet. When you write, also pass --project-summary "<one to three sentences: what ${project} is and why it exists, for someone who has never heard of it>".`,
     "",
-    `Existing posts about ${project} (link related ones; update one instead of retelling its story):`,
-    names(mine),
+    ...section("Notes (revise one when this is its topic):", entries.filter((e) => e.type === "note")),
     "",
-    "Recent posts from other projects (link if genuinely related):",
-    names(others),
+    ...section("Posts:", entries.filter((e) => e.type === "post")),
   ].join("\n");
 }

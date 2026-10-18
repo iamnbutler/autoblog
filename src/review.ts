@@ -3,7 +3,7 @@ import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { LOCK_PATH, LOG_PATH, REPO_ROOT, STATE_DIR, STATE_PATH, type Config } from "./config";
 import { discover, readDelta, sourceOf, type Delta } from "./transcripts";
-import { appendUpdate, projectFor, writePost } from "./journal";
+import { projectFor, reviseEntry, writeEntry } from "./journal";
 import { inbandTranscripts } from "./inband";
 import { vaultContext } from "./context";
 
@@ -11,8 +11,8 @@ type State = { transcripts: Record<string, { lines: number; reviewedAt: string }
 
 type Judgment = {
   reason: string;
-  posts: { title: string; kind: string; signal: number; tags: string[]; body: string }[];
-  updates?: { title: string; body: string }[];
+  entries: { type: "note" | "post"; title: string; tags: string[]; body: string }[];
+  additions?: { name: string; text: string }[];
   projectSummary?: string;
 };
 
@@ -21,33 +21,34 @@ const SCHEMA = {
   properties: {
     reason: { type: "string" },
     projectSummary: { type: "string", description: "Only when the project note has no description: 1-3 sentences on what the project is." },
-    posts: {
+    entries: {
       type: "array",
+      description: "New notes or posts, each on a topic no existing entry covers. Usually empty.",
       items: {
         type: "object",
         properties: {
-          title: { type: "string" },
-          kind: { type: "string", enum: ["fix", "solution", "howto", "decision", "discovery", "kickoff"] },
-          signal: { type: "integer", minimum: 1, maximum: 3 },
+          type: { type: "string", enum: ["note", "post"] },
+          title: { type: "string", description: "The topic, as Nate would search for it." },
           tags: { type: "array", items: { type: "string" } },
-          body: { type: "string", description: "Markdown body, without the title heading. Link notes with [[wikilinks]]." },
+          body: { type: "string", description: "Markdown body, without the title heading. Link entries with [[wikilinks]]." },
         },
-        required: ["title", "kind", "signal", "tags", "body"],
+        required: ["type", "title", "tags", "body"],
       },
     },
-    updates: {
+    additions: {
       type: "array",
+      description: "Additions to existing entries whose topic this is. You can't see their bodies, so add only what's new, written to stand on its own.",
       items: {
         type: "object",
         properties: {
-          title: { type: "string", description: "Exact name of an existing post, as listed." },
-          body: { type: "string", description: "Markdown to append under a dated Update heading." },
+          name: { type: "string", description: "Exact name of an existing note or post, as listed." },
+          text: { type: "string", description: "Markdown to add at the end of the entry, e.g. a new pitfall under its own heading." },
         },
-        required: ["title", "body"],
+        required: ["name", "text"],
       },
     },
   },
-  required: ["reason", "posts"],
+  required: ["reason", "entries"],
 };
 
 export function loadState(): State {
@@ -190,26 +191,25 @@ async function reviewDelta(
   }
 
   const written: string[] = [];
-  const posts = judgment.posts ?? [];
-  for (const p of posts) {
-    if (p.signal < cfg.minSignal) {
-      logDecision({ source: "sweep", transcript: ctx.transcript, decision: "below-signal", title: p.title, signal: p.signal });
-      continue;
-    }
+  const agent = delta.source === "claude" ? "claude-code" : "codex";
+  const entries = judgment.entries ?? [];
+  for (const e of entries) {
     if (ctx.dryRun) {
-      console.log(`\n=== [${p.signal}] ${p.title} (${p.kind}; ${p.tags.join(", ")})\n\n${p.body}\n`);
+      console.log(`\n=== ${e.type}: ${e.title} (${e.tags.join(", ")})\n\n${e.body}\n`);
       continue;
     }
-    written.push(
-      writePost(cfg, { ...p, project, projectSummary: judgment.projectSummary, cwd: delta.cwd, agent: delta.source === "claude" ? "claude-code" : "codex", session: delta.session, mode: "auto" }),
-    );
+    try {
+      written.push(writeEntry(cfg, { ...e, projects: [project], projectSummary: judgment.projectSummary, cwd: delta.cwd, agent, session: delta.session, mode: "auto" }));
+    } catch (err) {
+      console.error(`autoblog: ${String(err)}`);
+    }
   }
-  for (const u of judgment.updates ?? []) {
+  for (const a of judgment.additions ?? []) {
     if (ctx.dryRun) {
-      console.log(`\n=== update ${u.title}\n\n${u.body}\n`);
+      console.log(`\n=== add to ${a.name}\n\n${a.text}\n`);
       continue;
     }
-    const f = appendUpdate(cfg, u.title, u.body, delta.session);
+    const f = reviseEntry(cfg, a.name, { append: a.text, projects: [project], session: delta.session, agent });
     if (f) written.push(f);
   }
   if (ctx.verbose || ctx.dryRun) console.error(`reason: ${judgment.reason}`);
@@ -217,9 +217,9 @@ async function reviewDelta(
     source: "sweep",
     transcript: ctx.transcript,
     project,
-    decision: posts.length || judgment.updates?.length ? "write" : "skip",
+    decision: entries.length || judgment.additions?.length ? "write" : "skip",
     reason: judgment.reason,
-    titles: posts.map((p) => `[${p.signal}] ${p.title}`),
+    titles: [...entries.map((e) => `${e.type}: ${e.title}`), ...(judgment.additions ?? []).map((a) => `+ ${a.name}`)],
     written,
     dryRun: !!ctx.dryRun,
   });

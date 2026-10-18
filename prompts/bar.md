@@ -1,77 +1,72 @@
 # The autoblog bar
 
-Shared by in-band reflection (the agent doing the work) and the fallback reviewer.
+Shared by in-band reflection (the agent doing the work), manual writes, and the fallback reviewer.
 
-## Who you're writing for
+## Who it's for
 
-Nate, a year from now. Assume he has **forgotten this project entirely**: what it is, why it existed, who or what it was for, and what any of its internal names mean. Assume he remembers nothing about the session either. He's skimming his own blog, looking for the story of something he did and what he learned from it.
+Nate, later. He might be starting something similar, hitting the same wall again, or looking for something to turn into a real post. Assume he has forgotten the project and the session.
 
-## Default: write nothing
+The reference point is his own site, where posts look like "Spool", "Player", "Adding a Favicon in 2024", "Adding Extended Context in GPUI", and "Computer Use For All". They have topic titles, a plain first-person voice, and concrete code, and each one is about a thing he made or a way of doing something. The journal can be rougher than that, but never thinner.
 
-The unit of autoblog is a **story worth telling**, not a fact worth keeping. Commit messages, PRs, and repo docs already hold the facts. A post exists only when there's a narrative they can't tell.
+The journal holds two kinds of entries. Both are titled by **topic**, and both are **living**: you revise them in place as we learn more.
 
-**The number of posts follows the number of stories.** There are no quotas and no caps. Judge each candidate on its own. A quiet stretch of routine work produces zero posts, and that's common. A big session where we built a new tool, chased down a strange platform behavior, and made a design call might produce three or five separate posts. Each story gets its own post, linked to the others. Never merge separate stories into one post, and never pad a thin one to have something to show.
+## Notes
 
-Write only when one of these is true and you could tell it as a short story:
+A note is a reference page on a topic that will come up again. It answers "what do I need to know about X?", and it stays current.
 
-- **We figured something out.** A problem that fought back, where what turned out to be true was different from what it looked like, and the lesson applies beyond this one bug.
-- **We built something new or unusual.** A new project, tool, or technique, along with what it's for and why it's shaped the way it is.
-- **We made a call.** A real decision between alternatives, with the reasoning that would otherwise be lost.
-- **We learned how the world works.** A platform, tool, or system behaves in a way that changes how Nate will approach similar work in the future.
-- **We established a way of working.** A process or setup Nate will reuse across projects, together with the reason it exists.
+- Good titles: "Counting tokens: pitfalls", "Keeping long-running work alive when the screen locks", "macOS permissions for dev builds", "Signing and notarizing Mac apps in CI".
+- The title is the topic, phrased the way Nate would search for it. It isn't an event, and it isn't a sentence-long lesson.
+- The body is short: what to do, what goes wrong, and why. Bullets, code, and commands are welcome. Say where it came from in a line (`[[project]]`); don't tell the story of the session.
+- **Revise, don't duplicate.** If a note already covers the topic, add to it: a new pitfall, a better fix, or a correction. Rewrite the whole note so it reads as one current page, not a log of updates.
 
-Skip it if:
+## Posts
 
-- It's a fact without a story: one gotcha, one flag, one path. If it fits in a sentence, it belongs in a commit message or the repo's docs.
-- It only matters inside this codebase's internals. Ask whether it would matter to Nate on a different project.
-- It's routine progress: features, fixes, refactors, releases, reviews, or orchestrating agents.
-- It's a detail of a story you're already telling. Put it in that post instead. A finding that stands on its own with its own lesson is its own post.
-- An existing post already tells this story. Update that post only if the ending changed.
+A post is something Nate could put on his site with light editing. It has one of two shapes:
 
-If you're unsure about a candidate, skip it. That applies to each story on its own, not to the session.
-
-## Find the point
-
-Before writing anything, answer two questions in your head: **What was Nate trying to do, in plain terms?** And **what's the lesson that outlives this project?** The post is about those. Files, symlinks, flags, and error messages are evidence for the body, never the headline.
-
-- Bad: "Dev Desktop Tools.app re-points the shared ~/.local/state/desktop-tools/desktop-client symlink". This is a side effect, inside a project you've forgotten.
-- Good: "Dev builds need one stable app identity, or macOS keeps re-asking for permissions". This is the goal and the principle, and it's useful on any Mac app.
-
-The point is often raised early in a session ("why does it keep asking for permissions?") and resolved much later. Connect the two. If you can't tell what the point was, skip rather than write up the mechanism.
-
-## Write it like a blog post
-
-Write it as a short, readable narrative. Short means 300 to 900 words, not long. Use first person plural ("we"), plain prose and a natural voice, in the shape of a good engineering blog post:
-
-1. **Context.** What the project is (`[[project]]`), in a sentence or two, for someone who has never heard of it. What we were trying to do and why it mattered.
-2. **The problem or question.** What got in the way, or what we needed to decide. Say what it looked like at first.
-3. **What happened.** What we tried and what turned out to be true. Keep it brief, but keep the turn in the story: the moment it made sense.
-4. **The takeaway.** The lesson or principle, stated so it applies beyond this project.
-5. **Details** (optional, at the end, under a `## Details` heading). The exact commands, config, and paths needed to do it again. Keep these out of the story above.
+- **A project.** What it is, why it exists, and what's interesting about how it works, like "Spool" or "Player". Write it once the project has a shape worth describing, and revise it as the project changes.
+- **A way of working.** How we do something, refined across sessions and projects, like "How we sign Mac apps while prototyping" or "Designing by exploring several directions at once".
 
 Guidelines:
 
-- The title is the lesson or the story in plain words, the way you'd title a blog post, e.g. "Dev builds need one stable app identity, or macOS keeps re-asking for permissions". Not a symptom, a file path, or "Fixed a bug".
+- The title is short and topical: a name, "How we …", or a noun phrase. It is never a narrated event.
+- The body is 400 to 1,500 words in a plain first-person voice ("I" and "we"), with code where it helps. Start with context for someone who has never heard of the project. Use headings that follow the topic, not a fixed template, and skip the moral at the end.
+- Posts are rare. Most projects get one at most, and a single session almost never produces one. A post usually gathers material from many sessions.
+
+## Default: nothing
+
+Most checkpoints produce nothing. The most common useful outcome is a revision to an existing note. New notes are occasional, and new posts are rare. There are no quotas in either direction.
+
+Ask these in order:
+
+1. **Does an existing note or post cover this topic?** Revise it.
+2. **Is this a topic Nate will hit again, on another project?** Write a new note.
+3. **Is this a project, or a way of working, that's now worth describing whole?** Write a post.
+
+Skip everything else:
+
+- routine features, fixes, refactors, releases, and reviews
+- one-off incidents that don't belong to a topic
+- orchestrating agents
+- anything the repo's own docs already say
+- anything you can't name as a topic
+
+## Name the topic first
+
+Before writing, name the topic. The session hands you an incident, but the entry is about the topic that incident belongs to. Files, flags, and error messages are evidence for the body, never the title.
+
+| What happened | The entry |
+| --- | --- |
+| A dev build kept asking for Accessibility permission. | Note: "macOS permissions for dev builds" |
+| Summing token usage across requests came out ten times too high. | Note: "Counting tokens: pitfalls" |
+| Overnight agents shipped sixty PRs while the screen was locked, so none were verified. | Note: "Keeping long-running work alive when the screen locks" |
+| We built four site directions in parallel, then printed one as a zine. | Post: "Designing by exploring several directions at once" |
+| Signing and keychain trouble came up across three Mac apps. | Post: "How we sign Mac apps while prototyping" |
+
+The bad version of each is the incident used as the title, like "Sixty PRs shipped overnight against a locked screen were sixty unverified PRs."
+
+## Writing
+
 - Explain internal names the first time you use them, or don't use them.
-- Prefer prose over bullets in the story. Bullets are fine in Details.
-- Never include secrets, tokens, API keys, passwords, or private keys. Write `<redacted>` instead.
-- `tags` are lowercase and short, e.g. `macos`, `codesigning`, `bun`, `gpui`, `release`.
-- `kind` is one of: `fix`, `solution`, `howto`, `decision`, `discovery`, `kickoff`.
-
-## It's an Obsidian vault
-
-Write every post as a note in an Obsidian vault, whether or not anyone opens it in Obsidian.
-
-- **Link the project.** Mention it as `[[project-name]]` in the opening context paragraph. The project note says what the project is, and it collects every post about it through backlinks. If the writer context says the project note has no description, supply one with `--project-summary`: one to three sentences for someone who has never heard of the project.
-- **Link related posts** with `[[Exact Post Title]]` where the connection is real: this story builds on that one, or this decision reversed that one. Stories from the same session that relate should link each other. Use exact note names from the list you're given, or from `autoblog notes`.
-- **Don't invent links** to notes that don't exist, except the project note.
-- **Tags** go in the `--tags` flag, not as `#tags` in the body.
-- Plain Markdown otherwise. Headings, code fences, and callouts like `> [!note]` all render.
-
-## Signal
-
-- `1`: a decent story, but narrow.
-- `2`: a story with a lesson Nate will likely use again.
-- `3`: a jewel. Novel, hard-won, or worth showing someone. Be stingy.
-
-Always give a one-sentence reason for writing or skipping. It's logged and used to tune this bar.
+- Never include secrets, tokens, keys, or passwords. Write `<redacted>` instead.
+- The journal is an Obsidian vault. Link projects as `[[project]]` and related entries by their exact names, and don't invent links. Tags go in `--tags`. If a project has no description yet, add one with `--project-summary`.
+- Give every decision, including a skip, a one-sentence reason. Reasons are logged and used to tune this bar.

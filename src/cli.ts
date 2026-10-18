@@ -1,28 +1,30 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { basename, join } from "node:path";
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { parseArgs } from "node:util";
 import { LOG_PATH, loadConfig } from "./config";
-import { appendUpdate, commitLocked, ensureJournal, ensureProjectNote, listPosts, projectFor, projectSummary, writePost } from "./journal";
+import { archiveAll, commitLocked, ensureJournal, ensureProjectNote, findEntry, listEntries, projectFor, projectSummary, reviseEntry, TYPES, writeEntry, type EntryType } from "./journal";
 import { logDecision, readBar, sweep } from "./review";
 import { checkpoint, type HookInput } from "./inband";
 import { readDelta } from "./transcripts";
 import { init, install, uninstall } from "./install";
 import { build, deploy, password, setup, siteUrl } from "./deploy";
 
-const HELP = `autoblog: an effortless private journal written by your agents
+const HELP = `autoblog: a private journal written by your agents, organized by topic
 
 Usage
-  autoblog write --title <t> [--kind k] [--tags a,b] [--signal 1-3] [--agent a] [--mode manual|auto] < body.md
-  autoblog update <title|path> < more.md   append a dated update to an existing post
-  autoblog notes [--project p]      exact note names, for [[wikilinks]]
+  autoblog write --type note|post --title <topic> [--tags a,b] [--project a,b] [--mode manual|auto] < body.md
+  autoblog revise <name> [--title new] [--tags a,b] [--project a,b] < body.md
+                                    replace an entry's body (rewrite it whole; it's a living page)
+  autoblog show <name>              print an entry, to revise it
+  autoblog ls [--notes|--posts] [-n 50]
+                                    entries, most recently updated first (names are for [[wikilinks]])
+  autoblog search <words...>        grep notes and posts
   autoblog project [name] [--summary "..."]
                                     show or set what a project is (its hub note)
   autoblog skip "<reason>"          record that a checkpoint found nothing worth writing
   autoblog bar                      print the bar for what is worth writing
   autoblog transcript <path.jsonl>  condensed, readable view of a Claude Code or Codex transcript
-  autoblog search <words...>        grep the journal, newest first
-  autoblog ls [--jewels] [-n 20]    list recent posts
   autoblog log [-n 20]              recent auto-mode decisions, in-band and sweep (for tuning)
   autoblog sweep [--dry-run] [-v]   fallback: review idle transcripts no agent claimed in-band
   autoblog review <transcript> [--dry-run]
@@ -36,6 +38,7 @@ Usage
   autoblog site setup [--worker name] [--user name] [--rotate]
                                     private site on Cloudflare (Worker + basic auth); redeploys after every write
   autoblog site deploy|build|open|password
+  autoblog archive "<why>"          move every note and post to archive/<date>/ and start over
   autoblog reindex                  rebuild the journal index after hand edits, commit, push
   autoblog path                     print the journal directory
 `;
@@ -44,6 +47,9 @@ async function readStdin(): Promise<string> {
   if (process.stdin.isTTY) return "";
   return await new Response(Bun.stdin.stream()).text();
 }
+
+const list = (v?: string) => v?.split(",").map((t) => t.trim()).filter(Boolean);
+const detectAgent = () => (process.env.CLAUDECODE ? "claude-code" : process.env.CODEX_SANDBOX || process.env.CODEX_HOME ? "codex" : undefined);
 
 async function main() {
   const [cmd, ...rest] = process.argv.slice(2);
@@ -54,10 +60,9 @@ async function main() {
       const { values } = parseArgs({
         args: rest,
         options: {
+          type: { type: "string" },
           title: { type: "string" },
-          kind: { type: "string" },
           tags: { type: "string" },
-          signal: { type: "string" },
           agent: { type: "string" },
           project: { type: "string" },
           session: { type: "string" },
@@ -68,58 +73,70 @@ async function main() {
         },
       });
       const body = values.body ?? (await readStdin());
-      if (!values.title || !body.trim()) {
-        console.error("autoblog write: --title and a body on stdin (or --body) are required");
+      if (!values.title || !body.trim() || !TYPES.includes(values.type as EntryType)) {
+        console.error("autoblog write: --type note|post, --title, and a body on stdin (or --body) are required");
         process.exit(2);
       }
-      const file = writePost(cfg, {
+      const file = writeEntry(cfg, {
+        type: values.type as EntryType,
         title: values.title,
         body,
-        kind: values.kind,
-        tags: values.tags?.split(",").map((t) => t.trim()),
-        signal: values.signal ? Number(values.signal) : 2,
-        agent: values.agent ?? (process.env.CLAUDECODE ? "claude-code" : process.env.CODEX_SANDBOX || process.env.CODEX_HOME ? "codex" : undefined),
-        project: values.project,
+        tags: list(values.tags),
+        agent: values.agent ?? detectAgent(),
+        projects: list(values.project),
         projectSummary: values["project-summary"],
         session: values.session,
         cwd: process.cwd(),
         mode: values.mode === "auto" || values.mode === "backfill" ? values.mode : "manual",
         date: values.date,
       });
-      logDecision({ source: values.mode === "auto" ? "inband" : (values.mode ?? "manual"), session: values.session, decision: "write", titles: [`[${values.signal ?? 2}] ${values.title}`], written: [file] });
+      logDecision({ source: values.mode === "auto" ? "inband" : (values.mode ?? "manual"), session: values.session, decision: "write", titles: [`${values.type}: ${values.title}`], written: [file] });
       console.log(file);
       return;
     }
 
-    case "update": {
-      const { values, positionals } = parseArgs({ args: rest, allowPositionals: true, options: { session: { type: "string" }, body: { type: "string" } } });
+    case "revise": {
+      const { values, positionals } = parseArgs({
+        args: rest,
+        allowPositionals: true,
+        options: { title: { type: "string" }, tags: { type: "string" }, project: { type: "string" }, session: { type: "string" }, agent: { type: "string" }, body: { type: "string" } },
+      });
       const body = values.body ?? (await readStdin());
-      if (!positionals[0] || !body.trim()) {
-        console.error("autoblog update <title|path> < body.md");
+      if (!positionals[0] || (!body.trim() && !values.title)) {
+        console.error("autoblog revise <name> < body.md   (the whole new body; see `autoblog show <name>`)");
         process.exit(2);
       }
-      const file = appendUpdate(cfg, positionals[0], body, values.session);
+      const file = reviseEntry(cfg, positionals[0], {
+        body,
+        title: values.title,
+        tags: list(values.tags),
+        projects: list(values.project),
+        cwd: process.cwd(),
+        session: values.session,
+        agent: values.agent ?? detectAgent(),
+      });
       if (!file) {
-        console.error(`autoblog update: no post matches ${positionals[0]} (see \`autoblog notes\`)`);
+        console.error(`autoblog revise: nothing named ${positionals[0]} (see \`autoblog ls\`)`);
         process.exit(2);
       }
-      logDecision({ source: "inband", session: values.session, decision: "update", written: [file] });
+      logDecision({ source: values.session ? "inband" : "manual", session: values.session, decision: "revise", written: [file] });
       console.log(file);
+      return;
+    }
+
+    case "show": {
+      const file = rest[0] && findEntry(cfg, rest.join(" "));
+      if (!file) {
+        console.error(`autoblog show: nothing named ${rest.join(" ")} (see \`autoblog ls\`)`);
+        process.exit(2);
+      }
+      console.log(readFileSync(file, "utf8"));
       return;
     }
 
     case "skip": {
       const { values, positionals } = parseArgs({ args: rest, allowPositionals: true, options: { session: { type: "string" } } });
       logDecision({ source: "inband", session: values.session, project: projectFor(process.cwd()), decision: "skip", reason: positionals.join(" ") });
-      return;
-    }
-
-    case "notes": {
-      const { values } = parseArgs({ args: rest, options: { project: { type: "string" } } });
-      const posts = listPosts(cfg).filter((p) => !values.project || p.project === values.project);
-      for (const p of posts) console.log(`[[${basename(p.path, ".md")}]]  (${p.project}, ${p.date.slice(0, 10)})`);
-      const projects = existsSync(join(cfg.journal, "projects")) ? readdirSync(join(cfg.journal, "projects")).filter((f) => f.endsWith(".md")) : [];
-      for (const f of projects) console.log(`[[${basename(f, ".md")}]]  (project)`);
       return;
     }
 
@@ -153,20 +170,20 @@ async function main() {
 
     case "search": {
       if (!rest.length) return console.error("autoblog search <words...>");
-      const r = spawnSync("grep", ["-rilE", rest.join(".*"), join(cfg.journal, "posts")], { encoding: "utf8" });
+      const dirs = ["notes", "posts"].map((d) => join(cfg.journal, d)).filter(existsSync);
+      const r = spawnSync("grep", ["-rilE", rest.join(".*"), ...dirs], { encoding: "utf8" });
       const hits = new Set(r.stdout.split("\n").filter(Boolean).map((p) => p.slice(cfg.journal.length + 1)));
-      for (const p of listPosts(cfg).filter((p) => hits.has(p.path))) {
-        console.log(`${p.date.slice(0, 10)}  ${"★".repeat(p.signal).padEnd(3)}  ${p.title}  [${p.project}]\n            ${join(cfg.journal, p.path)}`);
+      for (const e of listEntries(cfg).filter((e) => hits.has(e.path))) {
+        console.log(`${e.type.padEnd(5)} ${e.title}  [${e.projects.join(", ")}]\n      ${join(cfg.journal, e.path)}`);
       }
       return;
     }
 
     case "ls": {
-      const { values } = parseArgs({ args: rest, options: { jewels: { type: "boolean" }, n: { type: "string", short: "n" } } });
-      let posts = listPosts(cfg);
-      if (values.jewels) posts = posts.filter((p) => p.signal >= 3);
-      for (const p of posts.slice(0, Number(values.n ?? 20))) {
-        console.log(`${p.date.slice(0, 10)}  ${"★".repeat(p.signal).padEnd(3)}  ${p.kind.padEnd(9)} ${p.title}  [${p.project}]`);
+      const { values } = parseArgs({ args: rest, options: { notes: { type: "boolean" }, posts: { type: "boolean" }, n: { type: "string", short: "n" } } });
+      const entries = listEntries(cfg, values.notes ? "note" : values.posts ? "post" : undefined);
+      for (const e of entries.slice(0, Number(values.n ?? 50))) {
+        console.log(`${e.updated.slice(0, 10)}  ${e.type.padEnd(5)} ${e.title}  [${e.projects.join(", ")}]`);
       }
       return;
     }
@@ -252,7 +269,7 @@ async function main() {
           return;
         case "build": {
           const s = build(cfg);
-          return console.log(`built ${s.posts} posts, ${s.projects} projects, ${s.tags} tags -> ~/.autoblog/site/dist`);
+          return console.log(`built ${s.notes} notes, ${s.posts} posts, ${s.projects} projects, ${s.tags} tags -> ~/.autoblog/site/dist`);
         }
         case "open":
           spawnSync("open", [cfg.site?.url ?? "https://dash.cloudflare.com"]);
@@ -266,6 +283,12 @@ async function main() {
 
     case "uninstall":
       return uninstall();
+
+    case "archive": {
+      if (!rest.length) return console.error('autoblog archive "<why these are being set aside>"');
+      const n = archiveAll(cfg, rest.join(" "));
+      return console.log(n ? `archived ${n} entries` : "nothing to archive");
+    }
 
     case "reindex":
       // After hand edits: rebuild the index, commit, push.

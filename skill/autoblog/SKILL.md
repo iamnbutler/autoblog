@@ -1,52 +1,56 @@
 ---
 name: autoblog
-description: Write a post to Nate's private engineering journal. Use when the user says "/autoblog", "autoblog this", "write up an autoblog", "blog this", or asks to record how something was done for later reference. Also use to search the journal when asked "how did we do X again?".
+description: Write to Nate's private journal of notes and posts. Use when the user says "/autoblog", "autoblog this", "write up an autoblog", "blog this", "make a note of this", or asks to record how something was done for later reference. Also use to search the journal when asked "how did we do X again?".
 ---
 
 # autoblog
 
-autoblog is Nate's private engineering blog, written by his agents across every project: the stories of things we figured out, built, decided, or learned. It's written for Nate a year from now, who has forgotten the project entirely.
+autoblog is Nate's private journal, written by his agents across every project. It's organized by topic, not by session, and it holds two kinds of entries:
 
-**Auto mode is driven by a hook.** At checkpoints, a Stop hook asks you to reflect, and the prompt says what to do. Don't write posts unprompted otherwise.
+- **Notes** are short reference pages on a topic that will come up again, like "Counting tokens: pitfalls" or "Keeping long-running work alive when the screen locks". They're revised in place as we learn more.
+- **Posts** are pieces Nate could publish with light editing: a project ("Spool"), or a way of working ("How we sign Mac apps while prototyping").
 
-## Manual mode: the user asked for a post
+**Auto mode is driven by a hook.** At checkpoints, a Stop hook asks you to reflect, and its prompt says what to do. Don't write unprompted otherwise.
 
-`/autoblog` with no argument means: write up the most interesting thing from the current work. `/autoblog <topic>` means: write about that topic, using what you know from this session.
+## Manual mode: the user asked for an entry
 
-1. Run `autoblog bar` and follow its "Find the point" and "Write it like a blog post" sections. Find what Nate was trying to do and the lesson that outlives the project. Write it as a short narrative: context, problem, what happened, takeaway, and optional `## Details`.
-2. Write the post with the CLI. The body goes on stdin:
+`/autoblog` with no argument means: capture the most useful thing from the current work. `/autoblog <topic>` means: write about that topic, using what you know from this session.
+
+1. Run `autoblog bar` and follow it. Name the topic first. The incident is evidence, and the topic is the title.
+2. Run `autoblog ls` (or `autoblog search <words>`). If an entry already covers the topic, revise it: run `autoblog show "<name>"`, then rewrite the whole body so it reads as one current page.
 
 ```bash
-autoblog write \
-  --title "Codesigning a helper app so TCC permissions stick" \
-  --kind fix \
-  --tags macos,codesigning,tcc \
-  --signal 2 \
-  --agent claude-code <<'EOF'
-A short narrative: what [[the-project]] is, what we were after, what got in the way, what turned out to be true, and the lesson. Link related posts as [[Exact Post Title]].
-
-## Details
-
-The exact commands, config, and paths needed to do it again.
+autoblog revise "Counting tokens: pitfalls" <<'EOF'
+<the full revised body>
 EOF
 ```
 
-- `--title`: the lesson or story in plain words, not a symptom or a file path.
-- `--kind`: `fix` | `solution` | `howto` | `decision` | `discovery` | `kickoff` | `note`.
-- `--signal`: `1` narrow, `2` reusable lesson, `3` jewel (rare).
-- `--agent`: your harness, e.g. `claude-code` or `codex`.
-- Project and cwd are detected from the current directory. If `autoblog project` shows no description, add `--project-summary "<1-3 sentences: what it is, why it exists>"`.
-- The journal is an Obsidian vault. Run `autoblog notes` for exact note names to `[[link]]`. To extend an existing story, use `autoblog update "<exact title>" <<'EOF' … EOF` instead of writing a new post.
+3. Otherwise, write a new entry. The body goes on stdin:
 
-3. Never include secrets; write `<redacted>` instead. The CLI also redacts common token formats.
-4. Tell the user the path the command printed, in one line.
+```bash
+autoblog write --type note \
+  --title "macOS permissions for dev builds" \
+  --tags macos,tcc,codesigning \
+  --agent claude-code <<'EOF'
+What to do, what goes wrong, and why, with commands. Mention where it came from: [[the-project]].
+EOF
+```
+
+- `--type`: `note` (the usual) or `post` (rare: a project, or a way of working).
+- `--title`: the topic, as Nate would search for it. Never an event.
+- `--project a,b`: the projects it draws on. The default is the current directory's project. If `autoblog project` shows no description, add `--project-summary "<1-3 sentences>"`.
+- Link related entries by exact name (`[[Name]]`), using the names `autoblog ls` prints.
+
+4. Never include secrets. Write `<redacted>` instead. The CLI also redacts common token formats.
+5. Tell the user the path the command printed, in one line.
 
 ## Reading the journal
 
 ```bash
-autoblog search <words>   # grep titles and bodies, newest first
-autoblog ls [--jewels]    # recent posts
-autoblog path             # where the journal lives
+autoblog search <words>        # grep notes and posts
+autoblog ls [--notes|--posts]  # most recently updated first
+autoblog show "<name>"         # print one entry
+autoblog path                  # where the journal lives
 ```
 
 When the user asks "how did we do X?" or "did we solve this before?", search the journal before you start digging.
