@@ -90,7 +90,7 @@ function markdown(notes: Map<string, Note>) {
 
 function entryRow(e: Note) {
   const m = e.meta!;
-  return `<li><a href="${e.url}">${esc(e.title)}</a><span class="row-meta">${m.type} · ${esc(m.projects.join(", "))} · ${m.updated.slice(0, 10)}</span></li>`;
+  return `<li><a href="${e.url}">${esc(e.title)}</a><span class="row-meta">${m.type} · ${esc(m.projects.join(", "))} · ${m.created.slice(0, 10)}</span></li>`;
 }
 
 /** Where the owner leaves notes for agents to fold into this page (see site/worker.js). */
@@ -127,7 +127,8 @@ export function buildSite(cfg: Config, out: string, siteName: string) {
   const notes = loadNotes(cfg);
   const render = markdown(notes);
   const all = [...notes.values()];
-  const entries = all.filter((n) => n.kind !== "project").sort((a, b) => b.meta!.updated.localeCompare(a.meta!.updated));
+  // Ordered by `created`: when the work happened. Revisions and backfills shouldn't reshuffle history.
+  const entries = all.filter((n) => n.kind !== "project").sort((a, b) => b.meta!.created.localeCompare(a.meta!.created));
   const projects = all.filter((n) => n.kind === "project").sort((a, b) => a.name.localeCompare(b.name));
   const about = (pr: Note) => entries.filter((e) => e.meta!.projects.some((p) => p.toLowerCase() === pr.name.toLowerCase()));
   // The timeline: one file per day, one "- thing: what happened" line per piece of work.
@@ -137,7 +138,7 @@ export function buildSite(cfg: Config, out: string, siteName: string) {
   const linesAbout = (pr: Note) =>
     logged.flatMap(({ day, lines }) => lines.filter((l) => l.toLowerCase().startsWith(`- [[${pr.name.toLowerCase()}]]`)).map((l) => ({ day, line: l })));
   const backlinks = (n: Note) =>
-    all.filter((o) => o !== n && o.links.has(n.name.toLowerCase())).sort((a, b) => (b.meta?.updated ?? "").localeCompare(a.meta?.updated ?? ""));
+    all.filter((o) => o !== n && o.links.has(n.name.toLowerCase())).sort((a, b) => (b.meta?.created ?? "").localeCompare(a.meta?.created ?? ""));
 
   rmSync(out, { recursive: true, force: true });
   const emit = (url: string, html: string) => {
@@ -236,7 +237,7 @@ ${(() => {
     ),
   );
 
-  // Home: search, then posts, then notes, each most recently updated first.
+  // Home: search, then posts, then notes, each newest first.
   const posts = entries.filter((e) => e.kind === "post");
   const noteEntries = entries.filter((e) => e.kind === "note");
   const searchIndex = entries.map((e) => ({ t: e.title, u: e.url, p: e.meta!.projects.join(" "), g: e.meta!.tags.join(" "), b: e.body.replace(/[#*`>\[\]_-]+/g, " ").replace(/\s+/g, " ").slice(0, 4000) }));
