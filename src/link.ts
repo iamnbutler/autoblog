@@ -145,7 +145,14 @@ export function linkEntry(cfg: Config, e: EntryMeta, all: Target[], state: LinkS
   const { body } = parseFile(readFileSync(file, "utf8"));
   const have = linked(body);
   const cands = all.filter((t) => t.name !== name && !have.has(t.name.toLowerCase()) && (!only || only.has(t.name)));
-  const picks = pickLinks(cfg, { name, body }, cands).filter((l) => cands.some((t) => t.name === l.target) && l.text.trim());
+  // A project link's text has to contain the project's name: "Spade" isn't ace2, and "Parley"
+  // isn't gpui-ce, however related they are.
+  const squash = (x: string) => x.toLowerCase().replace(/[^a-z0-9]/g, "");
+  const fits = (l: { text: string; target: string }) => {
+    const t = cands.find((c) => c.name === l.target);
+    return !!t && !!l.text.trim() && (t.kind !== "project" || squash(l.text).includes(squash(t.name)));
+  };
+  const picks = pickLinks(cfg, { name, body }, cands).filter(fits);
 
   const changed = withLock(cfg, () => {
     // Re-read under the lock: the entry may have been revised while the model was thinking.
