@@ -128,7 +128,8 @@ function writeEntryLocked(cfg: Config, e: EntryInput): string {
   const name = noteName(e.title);
   const existing = findEntry(cfg, name);
   if (existing) throw new Error(`"${name}" already exists (${relative(cfg.journal, existing)}); revise it instead: autoblog revise "${name}"`);
-  const parsed = e.date ? new Date(e.date) : null;
+  // A bare YYYY-MM-DD means that local day, not UTC midnight (which is the day before here).
+  const parsed = e.date ? new Date(/^\d{4}-\d{2}-\d{2}$/.test(e.date) ? `${e.date}T12:00` : e.date) : null;
   const when = localStamp(parsed && !isNaN(+parsed) ? parsed : new Date());
   const dir = join(cfg.journal, DIRS[e.type]);
   mkdirSync(dir, { recursive: true });
