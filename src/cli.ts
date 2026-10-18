@@ -183,9 +183,11 @@ async function main() {
     case "ls": {
       const { values } = parseArgs({ args: rest, options: { notes: { type: "boolean" }, posts: { type: "boolean" }, n: { type: "string", short: "n" } } });
       const entries = listEntries(cfg, values.notes ? "note" : values.posts ? "post" : undefined);
-      for (const e of entries.slice(0, Number(values.n ?? 50))) {
+      const shown = values.n ? entries.slice(0, Number(values.n)) : entries;
+      for (const e of shown) {
         console.log(`${e.updated.slice(0, 10)}  ${e.type.padEnd(5)} ${e.title}  [${e.projects.join(", ")}]`);
       }
+      if (shown.length < entries.length) console.log(`(${entries.length - shown.length} more; drop -n to see all)`);
       return;
     }
 
