@@ -15,7 +15,8 @@ const HELP = `autoblog: a private journal written by your agents, organized by t
 Usage
   autoblog write --type note|post --title <topic> [--tags a,b] [--project a,b] [--mode manual|auto] < body.md
   autoblog revise <name> [--title new] [--tags a,b] [--project a,b] < body.md
-                                    replace an entry's body (rewrite it whole; it's a living page)
+                                    replace an entry's body (rewrite it whole; it's a living page);
+                                    --project sets the project list, otherwise the current repo is added
   autoblog show <name>              print an entry, to revise it
   autoblog ls [--notes|--posts] [-n 50]
                                     entries, most recently updated first (names are for [[wikilinks]])

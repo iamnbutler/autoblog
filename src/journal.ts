@@ -173,10 +173,12 @@ export function reviseEntry(cfg: Config, ref: string, r: Revision): string | nul
     let file = findEntry(cfg, ref);
     if (!file) return null;
     const { front, body } = parseFile(readFileSync(file, "utf8"));
-    // Revising from inside another repo adds that project; a scratch dir or the journal adds nothing.
+    // --project sets the list outright. Otherwise revising from inside another repo adds that
+    // project, and a scratch dir or the journal adds nothing.
     const inRepo = r.cwd && !resolve(r.cwd).startsWith(resolve(cfg.journal)) ? repoProject(r.cwd) : null;
-    const here = r.projects?.length ? projectsFor({ projects: r.projects }) : inRepo ? [noteName(inRepo)] : [];
-    const projects = [...new Set([...listOf(front.projects), ...here.map((p) => `[[${p}]]`)])];
+    const projects = r.projects?.length
+      ? projectsFor({ projects: r.projects }).map((p) => `[[${p}]]`)
+      : [...new Set([...listOf(front.projects), ...(inRepo ? [`[[${noteName(inRepo)}]]`] : [])])];
     for (const p of projects) ensureProjectNote(cfg, unlink(p));
     const next: Front = {
       ...front,
