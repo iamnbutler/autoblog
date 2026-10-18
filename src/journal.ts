@@ -146,7 +146,7 @@ function writeEntryLocked(cfg: Config, e: EntryInput): string {
     updated: when,
     projects: projects.map((p) => `[[${p}]]`),
     tags: [...new Set((e.tags ?? []).map(tagify).filter(Boolean))],
-    sessions: e.session ? [e.session] : [],
+    sessions: e.session ? e.session.split(",").map((x) => x.trim()).filter(Boolean) : [],
     agent: e.agent ?? "",
     mode: e.mode,
   };
@@ -185,7 +185,7 @@ export function reviseEntry(cfg: Config, ref: string, r: Revision): string | nul
       updated: localStamp(new Date()),
       projects,
       tags: [...new Set([...listOf(front.tags), ...(r.tags ?? []).map(tagify).filter(Boolean)])],
-      sessions: [...new Set([...listOf(front.sessions), ...(r.session ? [r.session] : [])])],
+      sessions: [...new Set([...listOf(front.sessions), ...(r.session ? r.session.split(",").map((x) => x.trim()).filter(Boolean) : [])])],
     };
     if (r.agent) next.agent = r.agent;
     let text = r.body?.trim() ? r.body : body;

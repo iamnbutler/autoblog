@@ -123,7 +123,10 @@ export function timelinePass(cfg: Config, opts: { only?: string[]; dryRun?: bool
       continue;
     }
     if (!explicit && now - t.mtimeMs < cfg.idleMinutes * 60_000) continue;
-    const from = explicit ? 0 : (state[t.path] ?? 0);
+    // An explicit run picks up where the log left off, or from the start for a transcript the
+    // sweep only marked as seen.
+    const was = state[t.path];
+    const from = was === undefined || (explicit && was === Number.MAX_SAFE_INTEGER) ? 0 : was;
     const days = readDays(t.path, from, 60_000);
     const total = days[0]?.lines ?? from;
     if (days.length && isOwnSession(cfg, days[0])) {

@@ -24,6 +24,10 @@ This repo is the machinery. The journal lives in a separate private repo.
 
 **Timeline.** Alongside notes and posts there's a work log: `timeline/YYYY-MM-DD.md`, one line per thing done that day in any project (`- [[next-cloud]]: Added canvas posts: …`). It has no bar. On each sweep, a fast model (`timelineModel`, default `haiku`) reads each idle session's new activity day by day, and adds up to 12 lines per session-day, skipping what's already logged. `autoblog timeline --from <transcripts…>` backfills old sessions. The site has a `/timeline/` page, and each project page shows its recent lines.
 
+**Backfill.** The sweep only watches new activity. For history, `autoblog backfill [--since DATE] [--until DATE] [--project p] [--dry-run]` does what works by hand: agents harvest topics from groups of old sessions (read-only, [`prompts/backfill-harvest.md`](prompts/backfill-harvest.md)), one curator merges them into a plan ([`backfill-curate.md`](prompts/backfill-curate.md)), and writers write each section of it ([`backfill-write.md`](prompts/backfill-write.md)). Then it logs the sessions to the timeline and links everything. Sessions an entry already cites, or that an earlier backfill read, are left out, so a second machine doesn't redo the first one's work. Run `--dry-run` first: a real run is several `opus` agents for a while.
+
+**Several machines.** Each machine writes the same vault. Every commit runs `autoblog sync` in the background: fetch, merge (this machine's side wins where both changed the same lines), rebuild generated files, push.
+
 **Manual.** `/autoblog`, `/autoblog <topic>`, or "write up an autoblog for this", in any agent that loads skills.
 
 ## What goes in
@@ -64,6 +68,8 @@ autoblog skip "<reason>"         autoblog bar                 autoblog log
 autoblog init                    autoblog install             autoblog uninstall
 autoblog sweep [--dry-run -v]    autoblog review <transcript.jsonl> [--dry-run]
 autoblog archive "<why>"         autoblog reindex             autoblog site setup|deploy|open|password
+autoblog backfill [--since DATE] [--dry-run]   autoblog timeline [--from <transcripts...>]   autoblog link [--due]
+autoblog sync                    autoblog transcript <path.jsonl>   autoblog guide
 ```
 
 ## Config

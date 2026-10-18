@@ -8,6 +8,7 @@ import { logDecision, readBar, sweep } from "./review";
 import { linkAfterWrite, linkDue, linkNamed } from "./link";
 import { dayLines, timelineDir, timelinePass } from "./timeline";
 import { checkpoint, type HookInput } from "./inband";
+import { backfill } from "./backfill";
 import { readDelta } from "./transcripts";
 import { init, install, uninstall } from "./install";
 import { build, deploy, password, setup, siteUrl } from "./deploy";
@@ -336,6 +337,33 @@ async function main() {
       if (!rest.length) return console.error('autoblog archive "<why these are being set aside>"');
       const n = archiveAll(cfg, rest.join(" "));
       return console.log(n ? `archived ${n} entries` : "nothing to archive");
+    }
+
+    case "backfill": {
+      // Harvest, curate and write entries from old sessions. --dry-run lists what it would read.
+      const { values, positionals } = parseArgs({
+        args: rest,
+        allowPositionals: true,
+        options: {
+          since: { type: "string" },
+          until: { type: "string" },
+          project: { type: "string" },
+          parallel: { type: "string" },
+          "no-timeline": { type: "boolean" },
+          "dry-run": { type: "boolean" },
+        },
+      });
+      ensureJournal(cfg);
+      await backfill(cfg, {
+        since: values.since,
+        until: values.until,
+        project: values.project,
+        paths: positionals,
+        parallel: values.parallel ? Number(values.parallel) : undefined,
+        timeline: !values["no-timeline"],
+        dryRun: values["dry-run"],
+      });
+      return;
     }
 
     case "sync": {
