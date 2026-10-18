@@ -74,11 +74,29 @@ export function sourceOf(path: string): Source {
   }
 }
 
+type Limits = { user: number; summary: number; agent: number };
+const CLIPPED: Limits = { user: 3000, summary: 12_000, agent: 2000 };
+const FULL: Limits = { user: Infinity, summary: Infinity, agent: Infinity };
+
+/**
+ * A resumed or compacted session can copy earlier records in again; skip repeats. Records
+ * carry a uuid (Claude) or a timestamp (both), so an identical record is a copy.
+ */
+function repeated(rec: any, raw: string, seen: Set<string>): boolean {
+  const key = rec.uuid ?? (rec.timestamp ? raw : null);
+  if (!key) return false;
+  if (seen.has(key)) return true;
+  seen.add(key);
+  return false;
+}
+
 const clip = (s: string, n: number) => (s.length > n ? `${s.slice(0, n)} …[+${s.length - n}]` : s);
 const oneLine = (s: string) => s.replace(/\s+/g, " ").trim();
 
 /** Read a transcript from line `from` onward and condense it into a reviewer-friendly log. */
-export function readDelta(path: string, from: number, maxChars: number): Delta {
+export function readDelta(path: string, from: number, maxChars: number, opts: { full?: boolean } = {}): Delta {
+  const lim = opts.full ? FULL : CLIPPED;
+  const seen = new Set<string>();
   const source = sourceOf(path);
   const lines = readFileSync(path, "utf8").split("\n").filter(Boolean);
   const d: Delta = { source, text: "", toolCalls: 0, userTurns: 0, lines: lines.length };
@@ -91,7 +109,8 @@ export function readDelta(path: string, from: number, maxChars: number): Delta {
     } catch {
       return;
     }
-    const entries = source === "claude" ? claudeEntries(rec, d) : codexEntries(rec, d);
+    if (repeated(rec, raw, seen)) return;
+    const entries = source === "claude" ? claudeEntries(rec, d, lim) : codexEntries(rec, d, lim);
     if (i < from) {
       if (!d.opener) d.opener = entries.find((e) => e.startsWith("USER: "))?.slice(6);
       return;
@@ -125,6 +144,7 @@ export function readDays(path: string, from: number, maxChars: number): (Delta &
   const lines = readFileSync(path, "utf8").split("\n").filter(Boolean);
   const meta: Delta = { source, text: "", toolCalls: 0, userTurns: 0, lines: lines.length };
   const days = new Map<string, { d: Delta & { day: string }; parts: string[] }>();
+  const seen = new Set<string>();
   let day = "";
   lines.forEach((raw, i) => {
     let rec: any;
@@ -135,7 +155,8 @@ export function readDays(path: string, from: number, maxChars: number): (Delta &
     }
     const t = rec.timestamp ? new Date(rec.timestamp) : null;
     if (t && !isNaN(+t)) day = localDay(t);
-    const entries = source === "claude" ? claudeEntries(rec, meta) : codexEntries(rec, meta);
+    if (repeated(rec, raw, seen)) return;
+    const entries = source === "claude" ? claudeEntries(rec, meta, CLIPPED) : codexEntries(rec, meta, CLIPPED);
     if (i < from || !day || !entries.length) {
       if (!meta.opener) meta.opener = entries.find((e) => e.startsWith("USER: "))?.slice(6);
       return;
@@ -158,7 +179,7 @@ export function readDays(path: string, from: number, maxChars: number): (Delta &
   });
 }
 
-function claudeEntries(rec: any, d: Delta): string[] {
+function claudeEntries(rec: any, d: Delta, lim: Limits): string[] {
   if (rec.sessionId && !d.session) d.session = rec.sessionId;
   if (rec.cwd && !d.cwd) d.cwd = rec.cwd;
   if (rec.isMeta || rec.isSidechain) return [];
@@ -170,8 +191,11 @@ function claudeEntries(rec: any, d: Delta): string[] {
     if (c.type === "text" && c.text) {
       if (rec.type === "user") {
         if (/^<(command-|local-command|system-reminder)/.test(c.text.trim())) continue;
-        out.push(`USER: ${clip(c.text.trim(), 3000)}`);
-      } else out.push(`AGENT: ${clip(c.text.trim(), 2000)}`);
+        // The summary written at compaction arrives as a user turn; it's the densest record of
+        // what came before, so it gets more room, and it doesn't count as Nate speaking.
+        if (rec.isCompactSummary) out.push(`SUMMARY: ${clip(c.text.trim(), lim.summary)}`);
+        else out.push(`USER: ${clip(c.text.trim(), lim.user)}`);
+      } else out.push(`AGENT: ${clip(c.text.trim(), lim.agent)}`);
     } else if (c.type === "tool_use") {
       out.push(`TOOL ${c.name}: ${clip(oneLine(summarizeInput(c.input)), 300)}`);
     } else if (c.type === "tool_result") {
@@ -191,7 +215,7 @@ function summarizeInput(input: any): string {
   return JSON.stringify(input);
 }
 
-function codexEntries(rec: any, d: Delta): string[] {
+function codexEntries(rec: any, d: Delta, lim: Limits): string[] {
   const p = rec.payload ?? {};
   if (rec.type === "session_meta") {
     d.session ??= p.id;
@@ -206,9 +230,9 @@ function codexEntries(rec: any, d: Delta): string[] {
       if (p.role === "user") {
         const t = text(p.content);
         if (!t || t.startsWith("<environment_context>") || t.startsWith("<user_instructions>")) return [];
-        return [`USER: ${clip(t, 3000)}`];
+        return [`USER: ${clip(t, lim.user)}`];
       }
-      if (p.role === "assistant") return [`AGENT: ${clip(text(p.content), 2000)}`];
+      if (p.role === "assistant") return [`AGENT: ${clip(text(p.content), lim.agent)}`];
       return [];
     case "function_call":
     case "custom_tool_call":

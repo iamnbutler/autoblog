@@ -162,10 +162,10 @@ async function main() {
     }
 
     case "transcript": {
-      // Condensed, readable view of a Claude Code or Codex transcript: user, agent, tool calls, clipped results.
+      // Readable view of a Claude Code or Codex transcript: what was said in full, tool calls, clipped results.
       const { values, positionals } = parseArgs({ args: rest, allowPositionals: true, options: { from: { type: "string" } } });
       if (!positionals[0]) return console.error("autoblog transcript <path.jsonl> [--from line]");
-      const d = readDelta(positionals[0], Number(values.from ?? 0), Number.MAX_SAFE_INTEGER);
+      const d = readDelta(positionals[0], Number(values.from ?? 0), Number.MAX_SAFE_INTEGER, { full: true });
       const stamps = readFileSync(positionals[0], "utf8").match(/"timestamp":"([^"]+)"/g) ?? [];
       const when = (i: number) => stamps.at(i)?.slice(13, 29) ?? "?";
       console.log(`# ${d.source} session ${d.session ?? "?"} in ${d.cwd ?? "?"}, ${when(0)} to ${when(-1)} (${d.userTurns} user turns, ${d.toolCalls} tool calls)\n`);
