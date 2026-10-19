@@ -13,6 +13,17 @@ The agent doing the work decides what's worth writing, because only it has the w
 
 You can also ask directly: `/autoblog`, `/autoblog <topic>`, or "write up an autoblog for this", in any agent that loads skills.
 
+## Pausing a conversation
+
+Tell the agent "pause autoblog" (or run `autoblog pause` in the session) to keep a conversation out of the journal. The session id comes from the harness (`CLAUDE_CODE_SESSION_ID`, `CODEX_THREAD_ID`), or pass `--session`. While a session is paused:
+
+- the `Stop` hook stops checkpointing it;
+- `write` and `revise` from it are refused, and `skip` does nothing;
+- the sweep, timeline and backfill never read it, even if you name it explicitly. This lasts after `--off`, because the paused stretch can't be separated out of a transcript later;
+- in Claude Code, a `SessionStart` hook reminds the agent after compaction or `--resume`.
+
+`autoblog pause --off` turns checkpoints back on. Later reflections are told to leave out everything from before that point. State lives in `~/.autoblog/sessions.json`.
+
 ## Fallback sweep
 
 For transcripts no hook claimed (sessions from before install, or harnesses without hooks), a launchd job runs every 20 minutes. It hands idle transcripts from the last `lookbackHours` to `claude -p` with [`prompts/review.md`](../prompts/review.md) and the bar. It sees only a condensed transcript, so it's second best.

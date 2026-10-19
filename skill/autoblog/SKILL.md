@@ -1,6 +1,6 @@
 ---
 name: autoblog
-description: Write to the user's private autoblog journal of notes and posts. Use when the user says "/autoblog", "autoblog this", "write up an autoblog", "blog this", "make a note of this", or asks to record how something was done for later reference; when an autoblog checkpoint asks you to reflect; and to search the journal when asked "how did we do X again?".
+description: Write to the user's private autoblog journal of notes and posts. Use when the user says "pause autoblog" / "don't journal this" (run `autoblog pause`); when the user says "/autoblog", "autoblog this", "write up an autoblog", "blog this", "make a note of this", or asks to record how something was done for later reference; when an autoblog checkpoint asks you to reflect; and to search the journal when asked "how did we do X again?".
 ---
 
 # autoblog
@@ -49,6 +49,10 @@ EOF
 - Never include secrets. Write `<redacted>` instead. The CLI also redacts common token formats.
 
 5. If the user asked, tell them the path the command printed, in one line. After a checkpoint, just stop: don't resume other work or summarize it.
+
+## Pausing
+
+When the user says "pause autoblog", "don't journal this conversation" or similar, run `autoblog pause`. Add `--session <id>` if it can't detect the session. From then on, write nothing from this conversation, including skips and timeline notes, and don't carry anything from it into entries written elsewhere. If a checkpoint still arrives, ignore it. `write` and `revise` refuse anyway. Only run `autoblog pause --off` when the user asks to resume.
 
 ## Reading the journal
 

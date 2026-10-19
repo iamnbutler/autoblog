@@ -16,13 +16,17 @@ const CODEX_HOOKS = join(HOME, ".codex", "hooks.json");
 const HOOK_MARK = "autoblog hook";
 const CLI = join(HOME, ".local", "bin", "autoblog");
 
-/** Add (or with `remove`, strip) our Stop hook in a Claude Code / Codex style hooks object. */
-function wireHooks(file: string, command: string, remove = false) {
+/**
+ * Add (or with `remove`, strip) our hooks in a Claude Code / Codex style hooks object: Stop for
+ * checkpoints, and optionally SessionStart to remind a paused conversation after compaction.
+ */
+function wireHooks(file: string, command: string, remove = false, sessionStart = false) {
   const s = existsSync(file) ? JSON.parse(readFileSync(file, "utf8")) : {};
   s.hooks ??= {};
-  for (const event of ["Stop", "SessionEnd"]) {
+  for (const event of ["Stop", "SessionStart", "SessionEnd"]) {
     const groups: any[] = (s.hooks[event] ?? []).filter((g: any) => !g.hooks?.some((h: any) => String(h.command).includes(HOOK_MARK)));
     if (!remove && event === "Stop") groups.push({ hooks: [{ type: "command", command, timeout: 10 }] });
+    if (!remove && event === "SessionStart" && sessionStart) groups.push({ matcher: "compact|resume", hooks: [{ type: "command", command, timeout: 10 }] });
     if (groups.length) s.hooks[event] = groups;
     else delete s.hooks[event];
   }
@@ -112,8 +116,8 @@ export function install(opts: { noLaunchd?: boolean; noHooks?: boolean }) {
 
   // 4. In-band reflection: a Stop hook in each harness asks the working agent to reflect at checkpoints.
   if (!opts.noHooks) {
-    wireHooks(CLAUDE_SETTINGS, `${CLI} hook`);
-    say(`hooks       ${CLAUDE_SETTINGS.replace(HOME, "~")} (Stop)`);
+    wireHooks(CLAUDE_SETTINGS, `${CLI} hook`, false, true);
+    say(`hooks       ${CLAUDE_SETTINGS.replace(HOME, "~")} (Stop, SessionStart)`);
     wireHooks(CODEX_HOOKS, `${CLI} hook --agent codex`);
     say(`hooks       ${CODEX_HOOKS.replace(HOME, "~")} (Stop; approve it once with /hooks in Codex)`);
   }

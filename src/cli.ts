@@ -7,7 +7,7 @@ import { archiveAll, commitLocked, ensureJournal, ensureProjectNote, findEntry, 
 import { logDecision, readBar, sweep } from "./review";
 import { linkAfterWrite, linkDue, linkNamed } from "./link";
 import { dayLines, timelineDir, timelinePass } from "./timeline";
-import { checkpoint, type HookInput } from "./inband";
+import { checkpoint, currentSession, isPaused, PAUSED_NOTE, setPaused, type HookInput } from "./inband";
 import { backfill } from "./backfill";
 import { applyAnnotations, listAnnotations } from "./annotations";
 import { readDelta } from "./transcripts";
@@ -34,6 +34,9 @@ Usage
   autoblog project [name] [--summary "..."]
                                     show or set what a project is (its hub note)
   autoblog skip "<reason>"          record that a checkpoint found nothing worth writing
+  autoblog pause [--off] [--session id]
+                                    stop journaling this conversation: no checkpoints, and the sweep,
+                                    timeline and backfill leave it out; --off turns checkpoints back on
   autoblog bar                      print the bar for what is worth writing
   autoblog guide                    print the how-to (the autoblog skill), for checkpoints and manual writes
   autoblog transcript <path.jsonl>  condensed, readable view of a Claude Code or Codex transcript
@@ -61,6 +64,13 @@ async function readStdin(): Promise<string> {
 }
 
 const list = (v?: string) => v?.split(",").map((t) => t.trim()).filter(Boolean);
+/** Writing from a paused conversation is refused; the user turns it back on with `pause --off`. */
+function refuseIfPaused(session?: string) {
+  if (!isPaused(session ?? currentSession())) return;
+  console.error(`autoblog: journaling is paused for this conversation; nothing was written.\n${PAUSED_NOTE}`);
+  process.exit(3);
+}
+
 const detectAgent = () => (process.env.CLAUDECODE ? "claude-code" : process.env.CODEX_SANDBOX || process.env.CODEX_HOME ? "codex" : undefined);
 
 async function main() {
@@ -84,6 +94,7 @@ async function main() {
           date: { type: "string" },
         },
       });
+      refuseIfPaused(values.session);
       const body = values.body ?? (await readStdin());
       if (!values.title || !body.trim() || !TYPES.includes(values.type as EntryType)) {
         console.error("autoblog write: --type note|post, --title, and a body on stdin (or --body) are required");
@@ -113,6 +124,7 @@ async function main() {
         allowPositionals: true,
         options: { title: { type: "string" }, tags: { type: "string" }, project: { type: "string" }, session: { type: "string" }, agent: { type: "string" }, body: { type: "string" } },
       });
+      refuseIfPaused(values.session);
       const body = values.body ?? (await readStdin());
       if (!positionals[0] || (!body.trim() && !values.title)) {
         console.error("autoblog revise <name> < body.md   (the whole new body; see `autoblog show <name>`)");
@@ -148,7 +160,21 @@ async function main() {
 
     case "skip": {
       const { values, positionals } = parseArgs({ args: rest, allowPositionals: true, options: { session: { type: "string" } } });
+      if (isPaused(values.session ?? currentSession())) return;
       logDecision({ source: "inband", session: values.session, project: projectFor(process.cwd()), decision: "skip", reason: positionals.join(" ") });
+      return;
+    }
+
+    case "pause": {
+      const { values } = parseArgs({ args: rest, options: { off: { type: "boolean" }, session: { type: "string" }, agent: { type: "string" } } });
+      const session = values.session ?? currentSession();
+      if (!session) {
+        console.error("autoblog pause: couldn't tell which conversation this is; pass --session <id>");
+        process.exit(2);
+      }
+      setPaused(session, !values.off, values.agent ?? detectAgent() ?? "unknown");
+      logDecision({ source: "inband", session, project: projectFor(process.cwd()), decision: values.off ? "resume" : "pause" });
+      console.log(values.off ? `autoblog: checkpoints are back on for this conversation (${session}). Leave out anything from while it was paused.` : PAUSED_NOTE);
       return;
     }
 
@@ -284,6 +310,11 @@ async function main() {
       try {
         ev = JSON.parse(await readStdin());
       } catch {}
+      if (ev.hook_event_name === "SessionStart") {
+        // After a compaction or resume, remind a paused conversation that it's still paused.
+        if (isPaused(ev.session_id)) console.log(JSON.stringify({ hookSpecificOutput: { hookEventName: "SessionStart", additionalContext: PAUSED_NOTE } }));
+        return;
+      }
       const prompt = checkpoint(cfg, ev, agent);
       if (!prompt) return;
       if (agent === "claude-code") {

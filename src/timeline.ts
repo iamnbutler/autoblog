@@ -5,6 +5,7 @@ import { STATE_DIR, type Config } from "./config";
 import { commit, ensureJournal, projectFor, withLock } from "./journal";
 import { discover, readDays, sourceOf } from "./transcripts";
 import { isOwnSession } from "./review";
+import { isPrivate, privateSessions } from "./inband";
 
 /**
  * The timeline is a work log across every project: one file per day, one line per thing
@@ -113,10 +114,15 @@ export function timelinePass(cfg: Config, opts: { only?: string[]; dryRun?: bool
     ? [...only].filter(existsSync).map((path) => ({ path, source: sourceOf(path), mtimeMs: now }))
     : discover(cfg.sources);
   let added = 0;
+  const paused = privateSessions();
   const projectNotes = new Set(existsSync(join(cfg.journal, "projects")) ? readdirSync(join(cfg.journal, "projects")).map((f) => f.replace(/\.md$/, "")) : []);
 
   for (const t of candidates) {
     const explicit = only.has(t.path);
+    if (isPrivate(t.path, paused)) {
+      if (explicit) say(`skip (paused) ${t.path}`);
+      continue;
+    }
     if (!(t.path in state) && !explicit && now - t.mtimeMs > cfg.lookbackHours * 3600_000) {
       // First sight of an old transcript: start watching from here. Backfills pass it explicitly.
       state[t.path] = Number.MAX_SAFE_INTEGER;
