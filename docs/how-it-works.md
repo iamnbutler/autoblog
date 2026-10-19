@@ -13,6 +13,10 @@ The agent doing the work decides what's worth writing, because only it has the w
 
 You can also ask directly: `/autoblog`, `/autoblog <topic>`, or "write up an autoblog for this", in any agent that loads skills.
 
+## Recall
+
+Writing is half of it. A `UserPromptSubmit` hook (Claude Code and Codex) runs a ranked search on each prompt. When an entry clearly matches, because a rare word in the prompt names it in its title or tags, the hook tells the agent the entry exists and how to read it. "Set up TestFlight for this project" gets pointed at the TestFlight note. Each entry is mentioned once per session, and most prompts get nothing. `autoblog search <words>` runs the same ranking by hand.
+
 ## Fallback sweep
 
 For transcripts no hook claimed (sessions from before install, or harnesses without hooks), a launchd job runs every 20 minutes. It hands idle transcripts from the last `lookbackHours` to `claude -p` with [`prompts/review.md`](../prompts/review.md) and the bar. It sees only a condensed transcript, so it's second best.

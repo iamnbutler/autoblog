@@ -8,7 +8,7 @@ While you work, agents notice when something belongs in the journal and write it
 - **Posts**: rarer pieces about a project or a way of working ("How we sign Mac apps while prototyping").
 - **Timeline**: one line per thing done, per day, across every project.
 
-Most of the time they write nothing. The bar is in [`prompts/bar.md`](prompts/bar.md).
+Most of the time they write nothing. When you start something the journal already covers, the agent is pointed at the entry. The bar is in [`prompts/bar.md`](prompts/bar.md).
 
 ## Install
 
@@ -23,7 +23,7 @@ git clone https://github.com/iamnbutler/autoblog ~/code/autoblog
 
 ## Docs
 
-- [How it works](docs/how-it-works.md): reflection checkpoints, the fallback sweep, links, the timeline, several machines
+- [How it works](docs/how-it-works.md): reflection checkpoints, recall, the fallback sweep, links, the timeline, annotations, several machines
 - [Backfilling from your history](docs/backfill.md)
 - [The vault and the site](docs/vault.md)
 - [Reference](docs/reference.md): CLI, config, agent wiring

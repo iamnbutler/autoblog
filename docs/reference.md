@@ -5,7 +5,7 @@
 ```
 autoblog write --type note|post --title <topic> [--tags a,b] [--project a,b] < body.md
 autoblog revise <name> [--title new] < body.md
-autoblog show <name>     autoblog ls [--notes|--posts]     autoblog search <words...>
+autoblog show <name>     autoblog ls [--notes|--posts]     autoblog search <words...> [-n N]
 autoblog project [name] [--summary "..."]
 autoblog skip "<reason>" autoblog bar     autoblog guide   autoblog log
 autoblog init [--owner name] [--repo owner/name] [--dir path]
@@ -48,6 +48,6 @@ autoblog site setup | deploy | build | open | password
 
 | Agent | Checkpoints | Manual |
 | --- | --- | --- |
-| Claude Code | `Stop` hook in `~/.claude/settings.json` | skill at `~/.claude/skills/autoblog` |
-| Codex | `Stop` hook in `~/.codex/hooks.json` (approve once via `/hooks`) | skill at `~/.codex/skills/autoblog` and `~/.agents/skills/autoblog` |
+| Claude Code | `Stop` and `UserPromptSubmit` hooks in `~/.claude/settings.json` | skill at `~/.claude/skills/autoblog` |
+| Codex | `Stop` and `UserPromptSubmit` hooks in `~/.codex/hooks.json` (approve once via `/hooks`) | skill at `~/.codex/skills/autoblog` and `~/.agents/skills/autoblog` |
 | Anything else | a Stop hook calling `autoblog hook --agent <name>` (emits `{"decision":"block","reason":...}`), or the sweep with a reader in `src/transcripts.ts` | `skill/autoblog/SKILL.md`, or `autoblog write` |

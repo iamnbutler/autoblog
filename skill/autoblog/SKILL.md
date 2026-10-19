@@ -1,6 +1,6 @@
 ---
 name: autoblog
-description: Write to the user's private autoblog journal of notes and posts. Use when the user says "/autoblog", "autoblog this", "write up an autoblog", "blog this", "make a note of this", or asks to record how something was done for later reference; when an autoblog checkpoint asks you to reflect; and to search the journal when asked "how did we do X again?".
+description: Write to the user's private autoblog journal of notes and posts. Use when the user says "/autoblog", "autoblog this", "write up an autoblog", "blog this", "make a note of this", or asks to record how something was done for later reference; when an autoblog checkpoint asks you to reflect; and to search the journal before setting up, shipping, or debugging something that may have been done before (signing, TestFlight, deploys, a framework's pitfalls), or when asked "how did we do X again?".
 ---
 
 # autoblog
@@ -53,7 +53,7 @@ EOF
 ## Reading the journal
 
 ```bash
-autoblog search <words>        # grep notes and posts
+autoblog search <words>        # rank notes and posts, titles and tags first
 autoblog ls [--notes|--posts]  # most recently updated first
 autoblog show "<name>"         # print one entry
 autoblog path                  # where the journal lives
@@ -61,4 +61,4 @@ autoblog path                  # where the journal lives
 
 `timeline/` holds a day-by-day work log across every project, written automatically. Grep it for "when did we ship X?". Don't write to it yourself.
 
-When the user asks "how did we do X?" or "did we solve this before?", search the journal before you start digging.
+Before setting up or debugging something that may have been done before, or when the user asks "how did we do X?", search the journal first: `autoblog search <words>`, then `autoblog show "<title>"`. A hook also names clearly matching entries when a prompt arrives; read them when they apply.

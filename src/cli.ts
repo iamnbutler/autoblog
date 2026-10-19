@@ -10,6 +10,7 @@ import { dayLines, timelineDir, timelinePass } from "./timeline";
 import { checkpoint, type HookInput } from "./inband";
 import { backfill } from "./backfill";
 import { applyAnnotations, listAnnotations } from "./annotations";
+import { rank, recall } from "./recall";
 import { readDelta } from "./transcripts";
 import { init, install, uninstall } from "./install";
 import { build, deploy, password, setup, siteUrl } from "./deploy";
@@ -24,7 +25,7 @@ Usage
   autoblog show <name>              print an entry, to revise it
   autoblog ls [--notes|--posts] [-n N]
                                     entries, most recently updated first
-  autoblog search <words...>        grep notes and posts (check before writing a new topic)
+  autoblog search <words...> [-n N] rank notes and posts for some words (titles and tags count most)
   autoblog timeline [-n days] [--from <transcript.jsonl...>] [--dry-run]
                                     the work log: recent days, or log given transcripts (a backfill)
   autoblog annotations [apply] [--all] [--dry-run]
@@ -181,13 +182,11 @@ async function main() {
       return console.log(readBar(cfg));
 
     case "search": {
-      if (!rest.length) return console.error("autoblog search <words...>");
-      const dirs = ["notes", "posts"].map((d) => join(cfg.journal, d)).filter(existsSync);
-      const r = spawnSync("grep", ["-rilE", rest.join(".*"), ...dirs], { encoding: "utf8" });
-      const hits = new Set(r.stdout.split("\n").filter(Boolean).map((p) => p.slice(cfg.journal.length + 1)));
-      for (const e of listEntries(cfg).filter((e) => hits.has(e.path))) {
-        console.log(`${e.type.padEnd(5)} ${e.title}  [${e.projects.join(", ")}]\n      ${join(cfg.journal, e.path)}`);
-      }
+      const { values, positionals } = parseArgs({ args: rest, allowPositionals: true, options: { n: { type: "string", short: "n" } } });
+      if (!positionals.length) return console.error("autoblog search <words...>");
+      const hits = rank(cfg, positionals.join(" "), Number(values.n ?? 10));
+      if (!hits.length) return console.log("nothing in the journal matches");
+      for (const h of hits) console.log(`${h.type.padEnd(5)} ${h.title}  [${h.projects.join(", ")}]\n      ${h.snippet || h.path}`);
       return;
     }
 
@@ -276,14 +275,21 @@ async function main() {
     }
 
     case "hook": {
-      // Stop hook. Returns instantly unless this turn is a reflection checkpoint.
+      // Stop hook (returns instantly unless this turn is a reflection checkpoint), or with
+      // --recall, the UserPromptSubmit hook.
       if (process.env.AUTOBLOG_REVIEWER) return;
-      const { values } = parseArgs({ args: rest, options: { agent: { type: "string" } } });
+      const { values } = parseArgs({ args: rest, options: { agent: { type: "string" }, recall: { type: "boolean" } } });
       const agent = values.agent ?? "claude-code";
       let ev: HookInput = {};
       try {
         ev = JSON.parse(await readStdin());
       } catch {}
+      if (values.recall) {
+        // UserPromptSubmit: point the agent at entries this request clearly touches.
+        const note = recall(cfg, String((ev as any).prompt ?? ""), ev.session_id);
+        if (note) console.log(JSON.stringify({ hookSpecificOutput: { hookEventName: "UserPromptSubmit", additionalContext: note } }));
+        return;
+      }
       const prompt = checkpoint(cfg, ev, agent);
       if (!prompt) return;
       if (agent === "claude-code") {
