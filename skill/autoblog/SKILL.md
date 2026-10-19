@@ -1,6 +1,6 @@
 ---
 name: autoblog
-description: Write to the user's private autoblog journal of notes and posts. Use when the user says "pause autoblog" / "don't journal this" (run `autoblog pause`); when the user says "/autoblog", "autoblog this", "write up an autoblog", "blog this", "make a note of this", or asks to record how something was done for later reference; when an autoblog checkpoint asks you to reflect; and to search the journal when asked "how did we do X again?".
+description: Write to the user's private autoblog journal of notes and posts. Use when the user says "pause autoblog" / "don't journal this" (run `autoblog pause`; `autoblog resume` undoes it); when the user says "/autoblog", "autoblog this", "write up an autoblog", "blog this", "make a note of this", or asks to record how something was done for later reference; when an autoblog checkpoint asks you to reflect; and to search the journal when asked "how did we do X again?".
 ---
 
 # autoblog
@@ -44,7 +44,8 @@ EOF
 ```
 
 - `--type`: `note` (the usual) or `post` (rare: a project, or a way of working).
-- `--project a,b`: the projects it draws on. The default is the current directory's project. If `autoblog project <name>` shows no description, add `--project-summary "<1-3 sentences>"`.
+- `--project a,b`: the projects it draws on. The default is the current directory's project. If `autoblog project <name>` shows no description, add `--project-summary "<1-3 sentences>"`. With several projects, it goes to the first one with no description; set others with `autoblog project <name> --summary "..."`.
+- `--session a,b`: every session the entry draws on, when there's more than one.
 - Don't add `[[links]]` to other entries or projects. autoblog links entries after every write. Name related topics plainly in the text, and it will find them.
 - Never include secrets. Write `<redacted>` instead. The CLI also redacts common token formats.
 
@@ -52,7 +53,7 @@ EOF
 
 ## Pausing
 
-When the user says "pause autoblog", "don't journal this conversation" or similar, run `autoblog pause`. Add `--session <id>` if it can't detect the session. From then on, write nothing from this conversation, including skips and timeline notes, and don't carry anything from it into entries written elsewhere. If a checkpoint still arrives, ignore it. `write` and `revise` refuse anyway. Only run `autoblog pause --off` when the user asks to resume.
+When the user says "pause autoblog", "don't journal this conversation" or similar, run `autoblog pause`. Add `--session <id>` if it can't detect the session. From then on, write nothing from this conversation, including skips and timeline notes, and don't carry anything from it into entries written elsewhere. If a checkpoint still arrives, ignore it. `write` and `revise` refuse anyway. Only run `autoblog resume` when the user asks for it.
 
 ## Reading the journal
 

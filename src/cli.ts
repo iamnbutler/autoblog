@@ -17,9 +17,10 @@ import { build, deploy, password, setup, siteUrl } from "./deploy";
 const HELP = `autoblog: a private journal written by your agents, organized by topic
 
 Usage
-  autoblog write --type note|post --title <topic> [--tags a,b] [--project a,b] [--mode manual|auto] < body.md
+  autoblog write --type note|post --title <topic> [--tags a,b] [--project a,b] [--session a,b] [--mode manual|auto] < body.md
   autoblog revise <name> [--title new] [--tags a,b] [--project a,b] < body.md
-                                    replace an entry's body (rewrite it whole; it's a living page);
+                                    replace an entry's body (rewrite it whole; it's a living page); the
+                                    entry keeps its agent, and revisers are listed under editors;
                                     --project sets the project list, otherwise the current repo is added
   autoblog show <name>              print an entry, to revise it
   autoblog ls [--notes|--posts] [-n N]
@@ -34,9 +35,9 @@ Usage
   autoblog project [name] [--summary "..."]
                                     show or set what a project is (its hub note)
   autoblog skip "<reason>"          record that a checkpoint found nothing worth writing
-  autoblog pause [--off] [--session id]
-                                    stop journaling this conversation: no checkpoints, and the sweep,
-                                    timeline and backfill leave it out; --off turns checkpoints back on
+  autoblog pause [--session id]     stop journaling this conversation: no checkpoints, and the sweep,
+                                    timeline and backfill leave it out
+  autoblog resume [--session id]    turn checkpoints back on (the paused stretch stays out)
   autoblog bar                      print the bar for what is worth writing
   autoblog guide                    print the how-to (the autoblog skill), for checkpoints and manual writes
   autoblog transcript <path.jsonl>  condensed, readable view of a Claude Code or Codex transcript
@@ -64,9 +65,10 @@ async function readStdin(): Promise<string> {
 }
 
 const list = (v?: string) => v?.split(",").map((t) => t.trim()).filter(Boolean);
-/** Writing from a paused conversation is refused; the user turns it back on with `pause --off`. */
-function refuseIfPaused(session?: string) {
-  if (!isPaused(session ?? currentSession())) return;
+/** Writing from a paused conversation is refused; the user turns it back on with `autoblog resume`. */
+function refuseIfPaused(sessions?: string) {
+  const ids = [currentSession(), ...(sessions?.split(",").map((s) => s.trim()) ?? [])];
+  if (!ids.some((id) => isPaused(id))) return;
   console.error(`autoblog: journaling is paused for this conversation; nothing was written.\n${PAUSED_NOTE}`);
   process.exit(3);
 }
@@ -87,14 +89,15 @@ async function main() {
           tags: { type: "string" },
           agent: { type: "string" },
           project: { type: "string" },
-          session: { type: "string" },
+          session: { type: "string", multiple: true },
           body: { type: "string" },
           mode: { type: "string" },
           "project-summary": { type: "string" },
           date: { type: "string" },
         },
       });
-      refuseIfPaused(values.session);
+      const session = values.session?.join(",");
+      refuseIfPaused(session);
       const body = values.body ?? (await readStdin());
       if (!values.title || !body.trim() || !TYPES.includes(values.type as EntryType)) {
         console.error("autoblog write: --type note|post, --title, and a body on stdin (or --body) are required");
@@ -108,12 +111,12 @@ async function main() {
         agent: values.agent ?? detectAgent(),
         projects: list(values.project),
         projectSummary: values["project-summary"],
-        session: values.session,
+        session,
         cwd: process.cwd(),
         mode: values.mode === "auto" || values.mode === "backfill" ? values.mode : "manual",
         date: values.date,
       });
-      logDecision({ source: values.mode === "auto" ? "inband" : (values.mode ?? "manual"), session: values.session, decision: "write", titles: [`${values.type}: ${values.title}`], written: [file] });
+      logDecision({ source: values.mode === "auto" ? "inband" : (values.mode ?? "manual"), session, decision: "write", titles: [`${values.type}: ${values.title}`], written: [file] });
       console.log(file);
       return;
     }
@@ -122,9 +125,10 @@ async function main() {
       const { values, positionals } = parseArgs({
         args: rest,
         allowPositionals: true,
-        options: { title: { type: "string" }, tags: { type: "string" }, project: { type: "string" }, session: { type: "string" }, agent: { type: "string" }, body: { type: "string" } },
+        options: { title: { type: "string" }, tags: { type: "string" }, project: { type: "string" }, session: { type: "string", multiple: true }, agent: { type: "string" }, body: { type: "string" } },
       });
-      refuseIfPaused(values.session);
+      const session = values.session?.join(",");
+      refuseIfPaused(session);
       const body = values.body ?? (await readStdin());
       if (!positionals[0] || (!body.trim() && !values.title)) {
         console.error("autoblog revise <name> < body.md   (the whole new body; see `autoblog show <name>`)");
@@ -136,14 +140,14 @@ async function main() {
         tags: list(values.tags),
         projects: list(values.project),
         cwd: process.cwd(),
-        session: values.session,
+        session,
         agent: values.agent ?? detectAgent(),
       });
       if (!file) {
         console.error(`autoblog revise: nothing named ${positionals[0]} (see \`autoblog ls\`)`);
         process.exit(2);
       }
-      logDecision({ source: values.session ? "inband" : "manual", session: values.session, decision: "revise", written: [file] });
+      logDecision({ source: session ? "inband" : "manual", session, decision: "revise", written: [file] });
       console.log(file);
       return;
     }
@@ -165,16 +169,19 @@ async function main() {
       return;
     }
 
-    case "pause": {
+    case "pause":
+    case "resume": {
       const { values } = parseArgs({ args: rest, options: { off: { type: "boolean" }, session: { type: "string" }, agent: { type: "string" } } });
+      const resume = cmd === "resume" || values.off;
       const session = values.session ?? currentSession();
       if (!session) {
-        console.error("autoblog pause: couldn't tell which conversation this is; pass --session <id>");
+        console.error(`autoblog ${cmd}: couldn't tell which conversation this is; pass --session <id>`);
         process.exit(2);
       }
-      setPaused(session, !values.off, values.agent ?? detectAgent() ?? "unknown");
-      logDecision({ source: "inband", session, project: projectFor(process.cwd()), decision: values.off ? "resume" : "pause" });
-      console.log(values.off ? `autoblog: checkpoints are back on for this conversation (${session}). Leave out anything from while it was paused.` : PAUSED_NOTE);
+      if (resume && !isPaused(session)) return console.log(`autoblog: this conversation (${session}) isn't paused`);
+      setPaused(session, !resume, values.agent ?? detectAgent() ?? "unknown");
+      logDecision({ source: "inband", session, project: projectFor(process.cwd()), decision: resume ? "resume" : "pause" });
+      console.log(resume ? `autoblog: checkpoints are back on for this conversation (${session}). Leave out anything from while it was paused.` : PAUSED_NOTE);
       return;
     }
 

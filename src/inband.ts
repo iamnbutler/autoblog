@@ -76,7 +76,7 @@ export function setPaused(session: string, on: boolean, agent: string, transcrip
   saveSessions(sessions);
 }
 
-export const PAUSED_NOTE = `autoblog is paused for this conversation. Don't journal anything from it: no autoblog write, revise or skip, and nothing from it in later entries. Checkpoints won't fire, and the sweep, timeline and backfill leave it out. Only \`autoblog pause --off\`, run because the user asked, turns it back on.`;
+export const PAUSED_NOTE = `autoblog is paused for this conversation. Don't journal anything from it: no autoblog write, revise or skip, and nothing from it in later entries. Checkpoints won't fire, and the sweep, timeline and backfill leave it out. Only \`autoblog resume\`, run because the user asked, turns it back on.`;
 
 // Tool calls are counted by marker rather than parsed, so a Stop on a days-long
 // transcript only reads the bytes appended since the last checkpoint.

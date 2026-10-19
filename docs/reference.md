@@ -8,7 +8,7 @@ autoblog revise <name> [--title new] < body.md
 autoblog show <name>     autoblog ls [--notes|--posts]     autoblog search <words...>
 autoblog project [name] [--summary "..."]
 autoblog skip "<reason>" autoblog bar     autoblog guide   autoblog log
-autoblog pause [--off] [--session id]
+autoblog pause [--session id]    autoblog resume [--session id]
 autoblog init [--owner name] [--repo owner/name] [--dir path]
 autoblog install         autoblog uninstall
 autoblog sweep [--dry-run -v]             autoblog review <transcript.jsonl> [--dry-run]

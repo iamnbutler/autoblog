@@ -37,7 +37,7 @@ export function dayLines(cfg: Config, day: string): string[] {
 
 function appendLines(cfg: Config, day: string, lines: string[]) {
   mkdirSync(timelineDir(cfg), { recursive: true });
-  const all = [...dayLines(cfg, day), ...lines];
+  const all = [...new Set([...dayLines(cfg, day), ...lines])];
   writeFileSync(dayFile(cfg, day), `---\ndate: ${day}\ntype: timeline\n---\n\n${all.join("\n")}\n`);
 }
 

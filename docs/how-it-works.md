@@ -19,10 +19,10 @@ Tell the agent "pause autoblog" (or run `autoblog pause` in the session) to keep
 
 - the `Stop` hook stops checkpointing it;
 - `write` and `revise` from it are refused, and `skip` does nothing;
-- the sweep, timeline and backfill never read it, even if you name it explicitly. This lasts after `--off`, because the paused stretch can't be separated out of a transcript later;
+- the sweep, timeline and backfill never read it, even if you name it explicitly. This lasts after `resume`, because the paused stretch can't be separated out of a transcript later;
 - in Claude Code, a `SessionStart` hook reminds the agent after compaction or `--resume`.
 
-`autoblog pause --off` turns checkpoints back on. Later reflections are told to leave out everything from before that point. State lives in `~/.autoblog/sessions.json`.
+`autoblog resume` turns checkpoints back on. Later reflections are told to leave out everything from before that point. State lives in `~/.autoblog/sessions.json`.
 
 ## Fallback sweep
 
