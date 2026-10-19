@@ -4,7 +4,7 @@ import { spawnSync } from "node:child_process";
 import { isWithin, personalize, LOCK_PATH, LOG_PATH, REPO_ROOT, STATE_DIR, STATE_PATH, type Config } from "./config";
 import { discover, readDelta, sourceOf, type Delta } from "./transcripts";
 import { projectFor, writeEntry } from "./journal";
-import { inbandTranscripts } from "./inband";
+import { inbandTranscripts, isPrivate, privateSessions } from "./inband";
 import { vaultContext } from "./context";
 
 type State = { transcripts: Record<string, { lines: number; reviewedAt: string }> };
@@ -97,11 +97,17 @@ export async function sweep(cfg: Config, opts: SweepOpts = {}) {
     const say = (m: string) => opts.verbose && console.error(m);
 
     // Sessions an agent reflects on in-band are its own business; only orphans get reviewed here.
+    // Paused sessions are never reviewed, even when named explicitly.
     const inband = inbandTranscripts();
+    const paused = privateSessions();
     const candidates = discover(cfg.sources).filter((t) => (only.size === 0 ? !inband.has(t.path) : only.has(t.path)));
     for (const f of only) if (!candidates.some((c) => c.path === f) && existsSync(f)) candidates.push({ path: f, source: sourceOf(f), mtimeMs: now });
 
     for (const t of candidates) {
+      if (isPrivate(t.path, paused)) {
+        if (only.has(t.path)) say(`skip (paused) ${t.path}`);
+        continue;
+      }
       const seen = state.transcripts[t.path];
       const explicit = only.has(t.path);
       if (!seen && !explicit && now - t.mtimeMs > cfg.lookbackHours * 3600_000) {

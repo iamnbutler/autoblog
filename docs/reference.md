@@ -8,6 +8,7 @@ autoblog revise <name> [--title new] < body.md
 autoblog show <name>     autoblog ls [--notes|--posts]     autoblog search <words...> [-n N]
 autoblog project [name] [--summary "..."]
 autoblog skip "<reason>" autoblog bar     autoblog guide   autoblog log
+autoblog pause [--session id]    autoblog resume [--session id]
 autoblog init [--owner name] [--repo owner/name] [--dir path]
 autoblog install         autoblog uninstall
 autoblog sweep [--dry-run -v]             autoblog review <transcript.jsonl> [--dry-run]
@@ -18,7 +19,7 @@ autoblog archive "<why>" autoblog reindex autoblog sync    autoblog transcript <
 autoblog site setup | deploy | build | open | password
 ```
 
-`init` and `install` are idempotent. `install` links `~/.local/bin/autoblog`, links the skill into each harness, adds the `Stop` hooks and loads the launchd sweep. `uninstall` reverses all of that but leaves the vault and `~/.autoblog`.
+`init` and `install` are idempotent. `install` links `~/.local/bin/autoblog`, links the skill into each harness, adds the `Stop` hooks (and a `SessionStart` hook in Claude Code, for paused sessions) and loads the launchd sweep. `uninstall` reverses all of that but leaves the vault and `~/.autoblog`.
 
 ## Config
 
@@ -48,6 +49,6 @@ autoblog site setup | deploy | build | open | password
 
 | Agent | Checkpoints | Manual |
 | --- | --- | --- |
-| Claude Code | `Stop` and `UserPromptSubmit` hooks in `~/.claude/settings.json` | skill at `~/.claude/skills/autoblog` |
+| Claude Code | `Stop`, `UserPromptSubmit` and `SessionStart` (compact, resume) hooks in `~/.claude/settings.json` | skill at `~/.claude/skills/autoblog` |
 | Codex | `Stop` and `UserPromptSubmit` hooks in `~/.codex/hooks.json` (approve once via `/hooks`) | skill at `~/.codex/skills/autoblog` and `~/.agents/skills/autoblog` |
 | Anything else | a Stop hook calling `autoblog hook --agent <name>` (emits `{"decision":"block","reason":...}`), or the sweep with a reader in `src/transcripts.ts` | `skill/autoblog/SKILL.md`, or `autoblog write` |

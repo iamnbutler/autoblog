@@ -138,7 +138,15 @@ function writeEntryLocked(cfg: Config, e: EntryInput): string {
   const file = join(dir, `${name}.md`);
 
   const projects = projectsFor(e);
-  for (const p of projects) ensureProjectNote(cfg, p, projects.length === 1 ? e.projectSummary : undefined);
+  // With several projects, the summary describes the one that has no description yet.
+  const undescribed = projects.filter((p) => projectSummary(cfg, p) === null);
+  const described = projects.length === 1 ? projects[0] : undescribed[0];
+  if (e.projectSummary && projects.length > 1) {
+    const rest = undescribed.slice(1);
+    if (!described) console.error(`autoblog: --project-summary ignored: ${projects.join(", ")} all have descriptions (change one with \`autoblog project <name> --summary\`)`);
+    else console.error(`autoblog: --project-summary went to ${described}${rest.length ? `; still undescribed: ${rest.join(", ")} (\`autoblog project <name> --summary "..."\`)` : ""}`);
+  }
+  for (const p of projects) ensureProjectNote(cfg, p, p === described ? e.projectSummary : undefined);
   const front: Front = {
     title: e.title,
     type: e.type,
@@ -163,6 +171,7 @@ export type Revision = {
   projects?: string[];
   cwd?: string;
   session?: string;
+  /** Who is revising. The entry's `agent` stays its author; revisers are listed under `editors`. */
   agent?: string;
 };
 
@@ -187,7 +196,8 @@ export function reviseEntry(cfg: Config, ref: string, r: Revision): string | nul
       tags: [...new Set([...listOf(front.tags), ...(r.tags ?? []).map(tagify).filter(Boolean)])],
       sessions: [...new Set([...listOf(front.sessions), ...(r.session ? r.session.split(",").map((x) => x.trim()).filter(Boolean) : [])])],
     };
-    if (r.agent) next.agent = r.agent;
+    if (r.agent && !front.agent) next.agent = r.agent;
+    else if (r.agent && r.agent !== front.agent) next.editors = [...new Set([...listOf(front.editors), r.agent])];
     let text = r.body?.trim() ? r.body : body;
     const oldName = basename(file, ".md");
     if (r.title && noteName(r.title) !== oldName) {
@@ -298,11 +308,20 @@ export function projectSummary(cfg: Config, project: string): string | null {
   return body === PLACEHOLDER ? null : body;
 }
 
+// Timeline days only ever gain lines, and two machines often log the same day, so git keeps both sides.
+const ATTRIBUTES = "timeline/*.md merge=union";
+
 export function ensureJournal(cfg: Config) {
   if (!existsSync(join(cfg.journal, ".git"))) {
     throw new Error(`journal not found at ${cfg.journal} (run \`autoblog init\`)`);
   }
+  const attrs = join(cfg.journal, ".gitattributes");
+  const text = existsSync(attrs) ? readFileSync(attrs, "utf8") : "";
+  if (!text.split("\n").includes(ATTRIBUTES)) writeFileSync(attrs, `${text}${text && !text.endsWith("\n") ? "\n" : ""}${ATTRIBUTES}\n`);
 }
+
+/** A merge someone left unfinished. Committing now would capture its conflict markers. */
+const merging = (cfg: Config) => existsSync(join(cfg.journal, ".git", "MERGE_HEAD"));
 
 function git(cfg: Config, ...args: string[]) {
   return spawnSync("git", ["-C", cfg.journal, ...args], { encoding: "utf8" });
@@ -318,6 +337,10 @@ export function commitLocked(cfg: Config, message: string) {
  * the background job links it to the rest of the journal first, and deploys after that.
  */
 export function commit(cfg: Config, message: string, opts: { link?: string } = {}) {
+  if (merging(cfg)) {
+    console.error(`autoblog: ${cfg.journal} is mid-merge; left "${message}" uncommitted until it's resolved`);
+    return;
+  }
   regenerate(cfg);
   git(cfg, "add", "-A");
   git(cfg, "commit", "-q", "-m", message);
@@ -336,6 +359,7 @@ export function commit(cfg: Config, message: string, opts: { link?: string } = {
  */
 export function sync(cfg: Config): { merged: number; pushed: boolean } {
   return withLock(cfg, () => {
+    if (merging(cfg)) return { merged: 0, pushed: false };
     if (git(cfg, "fetch", "-q", "origin").status !== 0) return { merged: 0, pushed: false };
     const upstream = git(cfg, "rev-parse", "--abbrev-ref", "@{u}").stdout.trim() || "origin/main";
     const merged = Number(git(cfg, "rev-list", "--count", `HEAD..${upstream}`).stdout.trim()) || 0;
@@ -345,6 +369,14 @@ export function sync(cfg: Config): { merged: number; pushed: boolean } {
         git(cfg, "merge", "--abort");
         console.error(`autoblog: sync: merge failed: ${(m.stderr || m.stdout).slice(0, 500)}`);
         return { merged: 0, pushed: false };
+      }
+      // A union merge keeps a line both machines logged twice.
+      const days = git(cfg, "diff", "--name-only", "ORIG_HEAD", "HEAD", "--", "timeline").stdout.split("\n").filter(Boolean);
+      for (const f of days.map((d) => join(cfg.journal, d)).filter(existsSync)) {
+        const text = readFileSync(f, "utf8");
+        const seen = new Set<string>();
+        const deduped = text.split("\n").filter((l) => !l.startsWith("- ") || (!seen.has(l) && !!seen.add(l))).join("\n");
+        if (deduped !== text) writeFileSync(f, deduped);
       }
       regenerate(cfg);
       git(cfg, "add", "-A");

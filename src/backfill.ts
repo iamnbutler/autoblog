@@ -6,6 +6,7 @@ import { personalize, REPO_ROOT, STATE_DIR, type Config } from "./config";
 import { listEntries, parseFile, projectFor } from "./journal";
 import { discover, readDelta, sourceOf, type Transcript } from "./transcripts";
 import { isOwnSession } from "./review";
+import { isPrivate, privateSessions } from "./inband";
 import { conductorSessions, openCodeSessions, promptHistory, transcriptsIn, zedThreads, type Imported } from "./sources";
 import { linkDue } from "./link";
 import { timelinePass } from "./timeline";
@@ -102,6 +103,7 @@ export function inventory(cfg: Config, opts: BackfillOpts, work: string): Sessio
     ? opts.paths.map((path) => ({ path, source: sourceOf(path), mtimeMs: 0 }))
     : [...discover(cfg.sources), ...archived(), ...transcriptsIn(opts.from ?? [], work)];
   const skip = new Set([...citedSessions(cfg), ...loadDone()]);
+  const paused = privateSessions();
   const out: Session[] = [];
   const seen = new Set<string>();
   const keep = (s: Session) =>
@@ -116,7 +118,7 @@ export function inventory(cfg: Config, opts: BackfillOpts, work: string): Sessio
     const session = d.session ?? basename(t.path, ".jsonl");
     if (seen.has(session)) continue;
     seen.add(session);
-    if (skip.has(session) || isOwnSession(cfg, d) || d.userTurns === 0 || d.toolCalls < cfg.minToolCalls) continue;
+    if (isPrivate(session, paused) || isPrivate(t.path, paused) || skip.has(session) || isOwnSession(cfg, d) || d.userTurns === 0 || d.toolCalls < cfg.minToolCalls) continue;
     const [start, end] = stamps(t.path);
     const s: Session = { origin: t.source, path: t.path, session, project: projectFor(d.cwd), start, end, userTurns: d.userTurns, toolCalls: d.toolCalls, opener: (d.opener ?? "").replace(/\s+/g, " ").slice(0, 160) };
     if (keep(s)) out.push(s);
@@ -133,7 +135,7 @@ export function inventory(cfg: Config, opts: BackfillOpts, work: string): Sessio
       for (const i of found) {
         if (seen.has(i.session)) continue;
         seen.add(i.session);
-        if (skip.has(i.session) || isOwnSession(cfg, i) || i.userTurns < 2) continue;
+        if (isPrivate(i.session, paused) || skip.has(i.session) || isOwnSession(cfg, i) || i.userTurns < 2) continue;
         // Prompt-only sessions have no tool calls to count; judge them by how much was asked.
         if (i.origin === "prompts" ? i.userTurns < 4 : i.toolCalls < cfg.minToolCalls && i.userTurns < 4) continue;
         const s: Session = { ...i };

@@ -17,6 +17,17 @@ You can also ask directly: `/autoblog`, `/autoblog <topic>`, or "write up an aut
 
 Writing is half of it. A `UserPromptSubmit` hook (Claude Code and Codex) runs a ranked search on each prompt. When an entry clearly matches, because a rare word in the prompt names it in its title or tags, the hook tells the agent the entry exists and how to read it. "Set up TestFlight for this project" gets pointed at the TestFlight note. Each entry is mentioned once per session, and most prompts get nothing. `autoblog search <words>` runs the same ranking by hand.
 
+## Pausing a conversation
+
+Tell the agent "pause autoblog" (or run `autoblog pause` in the session) to keep a conversation out of the journal. The session id comes from the harness (`CLAUDE_CODE_SESSION_ID`, `CODEX_THREAD_ID`), or pass `--session`. While a session is paused:
+
+- the `Stop` hook stops checkpointing it;
+- `write` and `revise` from it are refused, and `skip` does nothing;
+- the sweep, timeline and backfill never read it, even if you name it explicitly. This lasts after `resume`, because the paused stretch can't be separated out of a transcript later;
+- in Claude Code, a `SessionStart` hook reminds the agent after compaction or `--resume`.
+
+`autoblog resume` turns checkpoints back on. Later reflections are told to leave out everything from before that point. State lives in `~/.autoblog/sessions.json`.
+
 ## Fallback sweep
 
 For transcripts no hook claimed (sessions from before install, or harnesses without hooks), a launchd job runs every 20 minutes. It hands idle transcripts from the last `lookbackHours` to `claude -p` with [`prompts/review.md`](../prompts/review.md) and the bar. It sees only a condensed transcript, so it's second best.
