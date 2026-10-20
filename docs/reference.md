@@ -12,11 +12,11 @@ autoblog pause [--session id]    autoblog resume [--session id]
 autoblog init [--owner name] [--repo owner/name] [--dir path]
 autoblog install         autoblog uninstall
 autoblog sweep [--dry-run -v]             autoblog review <transcript.jsonl> [--dry-run]
-autoblog timeline [--from <transcripts...>]                autoblog link [--due]
+autoblog timeline [--from <transcripts...>] | compact [day...]                autoblog link [--due]
 autoblog annotations [apply] [--all] [--dry-run]
 autoblog backfill [--since DATE] [--until DATE] [--project name] [--from dir] [--plan | --resume run] [--dry-run]
 autoblog archive "<why>" autoblog reindex autoblog sync    autoblog transcript <path.jsonl>
-autoblog site setup | deploy | build | open | password
+autoblog site setup | access | deploy | build | open | password
 ```
 
 `init` and `install` are idempotent. `install` links `~/.local/bin/autoblog`, links the skill into each harness, adds the `Stop` hooks (and a `SessionStart` hook in Claude Code, for paused sessions) and loads the launchd sweep. `uninstall` reverses all of that but leaves the vault and `~/.autoblog`.

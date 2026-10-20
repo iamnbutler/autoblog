@@ -6,14 +6,14 @@ import { LOG_PATH, loadConfig, REPO_ROOT } from "./config";
 import { archiveAll, commitLocked, ensureJournal, ensureProjectNote, findEntry, listEntries, projectFor, projectSummary, reviseEntry, sync, TYPES, writeEntry, type EntryType } from "./journal";
 import { logDecision, readBar, sweep } from "./review";
 import { linkAfterWrite, linkDue, linkNamed } from "./link";
-import { dayLines, timelineDir, timelinePass } from "./timeline";
+import { compactPass, dayLines, timelineDir, timelinePass } from "./timeline";
 import { checkpoint, currentSession, isPaused, PAUSED_NOTE, setPaused, type HookInput } from "./inband";
 import { backfill } from "./backfill";
 import { applyAnnotations, listAnnotations } from "./annotations";
 import { rank, recall } from "./recall";
 import { readDelta } from "./transcripts";
 import { init, install, uninstall } from "./install";
-import { build, deploy, password, setup, siteUrl } from "./deploy";
+import { access, build, deploy, password, setup, siteUrl } from "./deploy";
 
 const HELP = `autoblog: a private journal written by your agents, organized by topic
 
@@ -28,6 +28,7 @@ Usage
                                     entries, most recently updated first
   autoblog search <words...> [-n N] rank notes and posts for some words (titles and tags count most)
   autoblog timeline [-n days] [--from <transcript.jsonl...>] [--dry-run]
+  autoblog timeline compact [day...] [--dry-run]   condense days logged too finely, to at most 3 lines per project
                                     the work log: recent days, or log given transcripts (a backfill)
   autoblog annotations [apply] [--all] [--dry-run]
                                     notes left on the site's pages; apply folds open ones in (the sweep does too)
@@ -53,6 +54,7 @@ Usage
                                     (re)wire the CLI, skill, Stop hooks, and fallback sweep
   autoblog uninstall
   autoblog site setup [--worker name] [--user name] [--rotate]
+  autoblog site access --team <x.cloudflareaccess.com> --aud <tag> [--client-id id]   (token secret on stdin)
                                     private site on Cloudflare (Worker + basic auth); redeploys after every write
   autoblog site deploy|build|open|password
   autoblog archive "<why>"          move every note and post to archive/<date>/ and start over
@@ -271,6 +273,11 @@ async function main() {
         allowPositionals: true,
         options: { from: { type: "boolean" }, n: { type: "string", short: "n" }, "dry-run": { type: "boolean" } },
       });
+      if (positionals[0] === "compact") {
+        const removed = compactPass(cfg, { days: positionals.slice(1), dryRun: values["dry-run"], verbose: true });
+        if (!values["dry-run"]) console.log(`removed ${removed} line${removed === 1 ? "" : "s"}`);
+        return;
+      }
       if (values.from) {
         const added = timelinePass(cfg, { only: positionals, dryRun: values["dry-run"], verbose: true });
         if (!values["dry-run"]) console.log(`added ${added} line${added === 1 ? "" : "s"}`);
@@ -366,11 +373,19 @@ async function main() {
       const [sub, ...args] = rest;
       const { values } = parseArgs({
         args,
-        options: { worker: { type: "string" }, user: { type: "string" }, url: { type: "string" }, rotate: { type: "boolean" }, quiet: { type: "boolean" } },
+        options: {
+          worker: { type: "string" }, user: { type: "string" }, url: { type: "string" }, rotate: { type: "boolean" }, quiet: { type: "boolean" },
+          team: { type: "string" }, aud: { type: "string" }, "client-id": { type: "string" },
+        },
       });
       switch (sub) {
         case "setup":
           return setup({ worker: values.worker, user: values.user, url: values.url, rotate: values.rotate });
+        case "access": {
+          if (!values.team || !values.aud) return console.error("autoblog site access --team <x.cloudflareaccess.com> --aud <tag> [--client-id id]   (token secret on stdin)");
+          const secret = values["client-id"] && !process.stdin.isTTY ? readFileSync(0, "utf8").trim() : undefined;
+          return access({ team: values.team, aud: values.aud, clientId: values["client-id"], secret });
+        }
         case "deploy":
           if (!deploy(cfg, values.quiet)) process.exit(1);
           return;
@@ -384,7 +399,7 @@ async function main() {
         case "password":
           return console.log(password() ?? "(none; run `autoblog site setup`)");
         default:
-          return console.error("autoblog site setup|deploy|build|open|password");
+          return console.error("autoblog site setup|access|deploy|build|open|password");
       }
     }
 

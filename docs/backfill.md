@@ -104,7 +104,7 @@ Run the backfill on each machine for its own history. They share one vault: ever
 
 ## The timeline on its own
 
-The timeline (one line per thing done, per day, across every project) is cheap, written by `haiku`. To log old sessions without writing entries:
+The timeline (a few lines per project per day, across every project) is cheap, written by `haiku`. To log old sessions without writing entries:
 
 ```bash
 autoblog timeline --from ~/.claude/projects/*/*.jsonl
