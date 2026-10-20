@@ -18,7 +18,7 @@ export type Config = {
   journal: string;
   /** Model used by the auto-mode reviewer (any `claude --model` value). */
   model: string;
-  /** Fast model that writes the timeline (the work log) from transcripts. */
+  /** Model that writes the timeline (the work log) from transcripts. */
   timelineModel: string;
   /** Model the linker uses to find mentions of other entries. */
   linkModel: string;
