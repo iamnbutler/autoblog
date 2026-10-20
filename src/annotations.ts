@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { personalize, REPO_ROOT, type Config } from "./config";
-import { password } from "./deploy";
+import { accessSecret, password } from "./deploy";
 
 /*
  * Annotations are notes the owner leaves on a page of the site (site/worker.js keeps them in
@@ -12,12 +12,24 @@ import { password } from "./deploy";
 
 export type Annotation = { id: string; page: string; title: string; text: string; at: string; status: string; reply?: string };
 
-async function api(cfg: Config, path: string, init: RequestInit = {}): Promise<any> {
+/** Behind Access, the CLI signs in with the service token; otherwise with the password. */
+function credentials(cfg: Config): Record<string, string> | null {
+  const access = cfg.site?.access;
+  if (access) {
+    const secret = accessSecret();
+    return access.clientId && secret ? { "CF-Access-Client-Id": access.clientId, "CF-Access-Client-Secret": secret } : null;
+  }
   const pw = password();
-  if (!cfg.site?.url || !pw) throw new Error("the site isn't set up; run `autoblog site setup`");
-  const res = await fetch(cfg.site.url + path, {
+  return pw ? { Authorization: "Basic " + btoa(`${cfg.site!.user}:${pw}`) } : null;
+}
+
+async function api(cfg: Config, path: string, init: RequestInit = {}): Promise<any> {
+  const auth = cfg.site?.url ? credentials(cfg) : null;
+  if (!auth) throw new Error("the site isn't set up; run `autoblog site setup` (and `autoblog site access` if it's behind Access)");
+  const res = await fetch(cfg.site!.url + path, {
     ...init,
-    headers: { Authorization: "Basic " + btoa(`${cfg.site.user}:${pw}`), "Content-Type": "application/json", ...init.headers },
+    headers: { ...auth, "Content-Type": "application/json", ...init.headers },
+    redirect: "manual",
   });
   if (!res.ok) throw new Error(`${init.method ?? "GET"} ${path}: ${res.status} ${await res.text()}`);
   return res.json();

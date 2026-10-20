@@ -7,8 +7,9 @@ import { buildSite } from "./site";
 
 /*
  * The site is a Cloudflare Worker serving the built vault as static assets, behind
- * HTTP basic auth (site/worker.js). The password lives in a Worker secret and the
- * macOS Keychain (service "autoblog-site"), never in either repo.
+ * HTTP basic auth or Cloudflare Access (site/worker.js). The password lives in a Worker
+ * secret and the macOS Keychain (service "autoblog-site"), never in either repo; so does
+ * the Access service token's secret (service "autoblog-site-access").
  */
 
 const SITE_DIR = join(STATE_DIR, "site");
@@ -16,6 +17,7 @@ const DIST = join(SITE_DIR, "dist");
 const LOCK = join(SITE_DIR, "deploy.lock");
 const DIRTY = join(SITE_DIR, "deploy.dirty");
 const KEYCHAIN_SERVICE = "autoblog-site";
+const ACCESS_KEYCHAIN_SERVICE = "autoblog-site-access";
 const WRANGLER = ["x", "wrangler@4"];
 
 function wrangler(args: string[], input?: string) {
@@ -39,7 +41,7 @@ function writeWranglerConfig(cfg: Config) {
         compatibility_date: "2026-09-01",
         workers_dev: true,
         assets: { directory: DIST, binding: "ASSETS", run_worker_first: true, html_handling: "auto-trailing-slash", not_found_handling: "404-page" },
-        vars: { AUTOBLOG_USER: site.user },
+        vars: { AUTOBLOG_USER: site.user, ...(site.access ? { ACCESS_TEAM: site.access.team, ACCESS_AUD: site.access.aud } : {}) },
         ...(site.kv ? { kv_namespaces: [{ binding: "ANNOTATIONS", id: site.kv }] } : {}),
       },
       null,
@@ -118,6 +120,32 @@ function rememberUrl(cfg: Config, output: string) {
 export function password(): string | null {
   const r = spawnSync("security", ["find-generic-password", "-s", KEYCHAIN_SERVICE, "-w"], { encoding: "utf8" });
   return r.status === 0 ? r.stdout.trim() : null;
+}
+
+/** The Access service token's secret, which the CLI sends with its client id to get past Access. */
+export function accessSecret(): string | null {
+  const r = spawnSync("security", ["find-generic-password", "-s", ACCESS_KEYCHAIN_SERVICE, "-w"], { encoding: "utf8" });
+  return r.status === 0 ? r.stdout.trim() : null;
+}
+
+/**
+ * Put the site behind a Cloudflare Access app (created in the dashboard or API) instead of the
+ * password. The service token's secret is read from stdin into the Keychain, then the site redeploys.
+ */
+export function access(opts: { team: string; aud: string; clientId?: string; secret?: string }) {
+  const raw = JSON.parse(readFileSync(CONFIG_PATH, "utf8"));
+  if (!raw.site) {
+    console.error("autoblog site: not set up; run `autoblog site setup`");
+    process.exit(1);
+  }
+  const prev = raw.site.access ?? {};
+  raw.site.access = { team: opts.team, aud: opts.aud, ...(opts.clientId ?? prev.clientId ? { clientId: opts.clientId ?? prev.clientId } : {}) };
+  writeFileSync(CONFIG_PATH, JSON.stringify(raw, null, 2) + "\n");
+  if (opts.secret) {
+    spawnSync("security", ["add-generic-password", "-U", "-a", raw.site.access.clientId ?? "autoblog", "-s", ACCESS_KEYCHAIN_SERVICE, "-l", "autoblog site access token", "-w", opts.secret]);
+  }
+  if (!deploy(loadConfig())) process.exit(1);
+  console.log(`  access     ${opts.team} (aud ${opts.aud.slice(0, 12)}…${raw.site.access.clientId ? `; service token ${raw.site.access.clientId}` : "; no service token, so CLI annotation calls will fail"})`);
 }
 
 /** One-time: pick the Worker name and login, generate a password, deploy, and set the secret. */

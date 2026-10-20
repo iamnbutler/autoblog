@@ -1,9 +1,40 @@
-// Serves the built vault, but only to someone with the password (HTTP basic auth).
-// Fails closed: with no AUTOBLOG_PASSWORD secret set, nothing is served.
+// Serves the built vault, but only to someone signed in: through Cloudflare Access when
+// ACCESS_TEAM and ACCESS_AUD are set, otherwise with the password (HTTP basic auth).
+// Fails closed: with neither configured, nothing is served.
 const enc = new TextEncoder();
 const digest = async (s) => new Uint8Array(await crypto.subtle.digest("SHA-256", enc.encode(s)));
+const b64url = (s) => Uint8Array.from(atob(s.replace(/-/g, "+").replace(/_/g, "/")), (c) => c.charCodeAt(0));
+
+// Access signs a JWT for every request it lets through. Check it here too, so the Worker
+// stays closed if Access is ever turned off or the Worker is reached another way.
+let certs; // { at, keys: Map<kid, CryptoKey> }, refreshed hourly and when a kid is unknown
+async function accessKey(team, kid) {
+  if (!certs || Date.now() - certs.at > 3600_000 || !certs.keys.has(kid)) {
+    const { keys } = await (await fetch(`https://${team}/cdn-cgi/access/certs`)).json();
+    const imported = await Promise.all(keys.map(async (k) => [k.kid, await crypto.subtle.importKey("jwk", k, { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" }, false, ["verify"])]));
+    certs = { at: Date.now(), keys: new Map(imported) };
+  }
+  return certs.keys.get(kid);
+}
+
+async function accessAuthorized(req, env) {
+  const token = req.headers.get("Cf-Access-Jwt-Assertion");
+  if (!token) return false;
+  try {
+    const [h, p, sig] = token.split(".");
+    const header = JSON.parse(new TextDecoder().decode(b64url(h)));
+    const claims = JSON.parse(new TextDecoder().decode(b64url(p)));
+    const key = header.alg === "RS256" && (await accessKey(env.ACCESS_TEAM, header.kid));
+    if (!key || !(await crypto.subtle.verify("RSASSA-PKCS1-v1_5", key, b64url(sig), enc.encode(`${h}.${p}`)))) return false;
+    const aud = Array.isArray(claims.aud) ? claims.aud : [claims.aud];
+    return claims.iss === `https://${env.ACCESS_TEAM}` && aud.includes(env.ACCESS_AUD) && claims.exp * 1000 > Date.now();
+  } catch {
+    return false;
+  }
+}
 
 async function authorized(req, env) {
+  if (env.ACCESS_TEAM && env.ACCESS_AUD) return accessAuthorized(req, env);
   if (!env.AUTOBLOG_PASSWORD) return false;
   const got = await digest(req.headers.get("Authorization") ?? "");
   const want = await digest("Basic " + btoa(`${env.AUTOBLOG_USER}:${env.AUTOBLOG_PASSWORD}`));
@@ -18,7 +49,7 @@ async function annotations(req, env, url) {
   const kv = env.ANNOTATIONS;
   if (!kv) return json({ error: "annotations are not set up; run `autoblog site deploy`" }, 501);
   const id = url.pathname.split("/")[2];
-  // Browsers resend basic auth to this origin from any site. Writes must be same-origin JSON,
+  // Browsers resend basic auth and Access's cookie to this origin from any site. Writes must be same-origin JSON,
   // which another site can't send without a CORS preflight this worker never answers.
   if (req.method !== "GET") {
     const origin = req.headers.get("Origin");
@@ -69,6 +100,7 @@ async function annotations(req, env, url) {
 export default {
   async fetch(req, env) {
     if (!(await authorized(req, env))) {
+      if (env.ACCESS_AUD) return new Response("Sign in through Cloudflare Access", { status: 403, headers: { "Cache-Control": "no-store" } });
       return new Response("Authentication required", {
         status: 401,
         headers: { "WWW-Authenticate": 'Basic realm="autoblog", charset="UTF-8"', "Cache-Control": "no-store" },

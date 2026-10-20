@@ -28,7 +28,18 @@ The site keeps Obsidian's semantics: wikilinks (with `|alias` and `#heading`), b
 
 ```bash
 autoblog site setup [--worker name] [--user name] [--rotate]   # once
+autoblog site access --team <x> --aud <tag> --client-id <id>   # optional, secret on stdin
 autoblog site open | deploy | build | password
 ```
 
-For SSO instead, put a Cloudflare Access application in front of the worker's hostname.
+Basic auth asks again whenever the browser restarts. To sign in once a month instead, put Cloudflare Access in front:
+
+1. Turn on Zero Trust for the account (dashboard only: a team name and the Free plan).
+2. Create a self-hosted Access app for the Worker's hostname with a long session (e.g. `720h`) and an allow policy for your email. Add a service token and a second policy, decision `non_identity` (Service Auth), that includes it.
+3. Tell autoblog, with the token's secret on stdin so it lands in the Keychain:
+
+```bash
+autoblog site access --team <team>.cloudflareaccess.com --aud <app audience tag> --client-id <token client id> < secret.txt
+```
+
+The Worker then verifies Access's signed JWT on every request instead of the password, and the CLI sends the service token for annotations.
