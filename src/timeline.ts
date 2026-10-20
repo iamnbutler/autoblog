@@ -64,7 +64,7 @@ const SCHEMA = {
         type: "object",
         properties: {
           thing: { type: "string", description: 'The project or effort, as the owner would name it: "Next Cloud", "Ramble", "autoblog", "Taxes". Use the name already in the day\'s lines when there is one.' },
-          lines: { type: "array", maxItems: 3, items: { type: "string" }, description: "The thing's complete lines for the day, replacing any already logged: 1 to 3, past tense, 10 to 30 words each, without the thing's name." },
+          lines: { type: "array", maxItems: 3, items: { type: "string" }, description: "The thing's complete lines for the day, replacing any already logged: at most 3, past tense, 10 to 25 words each, without the thing's name." },
         },
         required: ["thing", "lines"],
       },
@@ -73,14 +73,18 @@ const SCHEMA = {
   required: ["things"],
 };
 
-const RULES = (owner: string) => `The log is for remembering what moved, read months later with no other context. Per thing per day, log the most important contributions: one line each for the one or two that mattered most (something shipped, built, fixed, decided, or found out), and at most one more line that sums up the smaller things together. Three lines is the ceiling, not the goal; one is often right.
+const RULES = (owner: string) => `The log is for remembering what moved, read months later with no other context. The bar is high: a line has to be something ${owner} would want to find again, a change in what a project can do, a release, a decision, or something learned the hard way. Most work doesn't clear it, and most things get no lines on most days. Nothing has to be logged, and no thing has to fill its lines.
 
-Each line says what happened in 10 to 30 words: the headline, plus the one detail that makes it findable later. Write it the way ${owner} would jot it down, not as a report: what it does for the person using it, not how the work was organized.
+At most, per thing per day: one line for each of the one or two contributions that mattered, and one more line summing up smaller things, but only when together they add up to something worth remembering. Never pad to reach a count; one line is often right, and none is often right.
+
+Each line says what happened in 10 to 25 words: the headline, plus the one detail that makes it findable later. Write it the way ${owner} would jot it down, not as a report: what it does for the person using it, not how the work was organized.
 
 Good: "Shipped Canary 0.0.50.80: project access and sharing, collaborator limits on agent runs, and moving channels straight to a cloud workspace."
-Good: "Smaller: fixed the submit button spinner, tidied channel menus, and provider setup now offers to set one up instead of erroring."
+Good: "Decided against a Rust rewrite: its safety gains cover only pure logic, and the bugs that hurt come from live macOS."
+Too small, leave out: changing a site headline, regenerating a preview image, an app icon, adding entitlements or a config key, a README trim, a release script on its own. They're steps; at most they belong in the line for what they led to.
 Bad: six lines for one release (each test run, each fix, the deploy). Fold steps, test runs, and the findings that led to a fix into the line for what came of them.
 Bad: "Freed 178Gi to 373Gi" followed later by "Corrected the total: 419Gi". Keep only the right number.
+Bad: "Committed locally, not pushed" or "not yet tested in a browser". Leave out where the work stands unless that's the point.
 
 - Never mention PR or issue numbers, merges, rebases or branch names, test counts, or file names unless they're the point.
 - Leave out edits to ${owner}'s journal itself (writing or revising notes and posts); the entries are their own record.
@@ -89,13 +93,13 @@ Bad: "Freed 178Gi to 373Gi" followed later by "Corrected the total: 419Gi". Keep
 
 const system = (cfg: Config) => `You keep ${cfg.owner}'s work log: a few lines per project per day, one file per day. You get a condensed slice of one coding-agent session from one day, and the lines already logged for that day.
 
-For each thing this slice actually moved forward, return its complete lines for the day: the lines already logged for it, merged with what this slice did, rewritten to fit the limit below. What you return replaces that thing's existing lines, so keep anything already logged that still matters, and correct anything this slice shows was wrong. Don't return things this slice didn't touch; their lines stay as they are. A slice where nothing landed returns no things.
+For each thing this slice moved forward enough to clear the bar below, return its complete lines for the day: the lines already logged for it, merged with what this slice did, rewritten to fit the limit. What you return replaces that thing's existing lines, so keep anything already logged that still matters, and correct anything this slice shows was wrong. Don't return things this slice didn't touch, or touched only in small ways; their lines stay as they are. Most slices return no things.
 
 \`thing\` is the project, not a feature; the session's own project unless the work was clearly for something else. Reuse the exact name the day's lines already use for it.
 
 ${RULES(cfg.owner)}`;
 
-const compactSystem = (cfg: Config) => `You keep ${cfg.owner}'s work log: a few lines per project per day. You get one project's lines from one day, written too finely. Rewrite them as that project's complete lines for the day, keeping what mattered and dropping the rest. Use only what the lines say; don't invent detail.
+const compactSystem = (cfg: Config) => `You keep ${cfg.owner}'s work log: a few lines per project per day. You get one project's lines from one day, logged before the bar below was raised. Rewrite them as that project's complete lines for the day, keeping only what clears the bar. If nothing does, return the project with no lines, and its lines are removed. Use only what the lines say; don't invent detail.
 
 ${RULES(cfg.owner)}`;
 
@@ -135,7 +139,8 @@ function formatThings(picks: { thing: string; lines: string[] }[], names: Map<st
     const note = notes.get(k);
     const tag = note ? `[[${note}]]` : `**${names.get(k) ?? label}**`;
     const lines = p.lines.map(oneLine).filter(Boolean).slice(0, 3).map((t) => `- ${tag}: ${t}`);
-    if (lines.length) things.set(k, [...(things.get(k) ?? []), ...lines].slice(0, 3));
+    // An empty set is kept: it clears the thing's lines for the day.
+    things.set(k, [...(things.get(k) ?? []), ...lines].slice(0, 3));
   }
   return things;
 }
@@ -213,8 +218,8 @@ export function timelinePass(cfg: Config, opts: { only?: string[]; dryRun?: bool
 }
 
 /**
- * Rewrite days logged before the per-project limit: each project with more than `over` lines on
- * a day is condensed to at most three. Returns the number of lines removed.
+ * Rewrite days logged before the current bar: each project with more than `over` lines on a day
+ * (by default, every project) is condensed to at most three, or none. Returns the number of lines removed.
  */
 export function compactPass(cfg: Config, opts: { days?: string[]; over?: number; dryRun?: boolean; verbose?: boolean } = {}): number {
   const say = (m: string) => opts.verbose && console.error(m);
@@ -228,13 +233,13 @@ export function compactPass(cfg: Config, opts: { days?: string[]; over?: number;
     const names = existingNames(cfg, day);
     const things = new Map<string, string[]>();
     for (const [k, ls] of groups) {
-      if (!k || ls.length <= (opts.over ?? 3)) continue;
+      if (!k || ls.length <= (opts.over ?? 0)) continue;
       const name = names.get(k)!;
       const picks = askModel(cfg, compactSystem(cfg), `Day: ${day}\nProject: ${name}\n\n${ls.map((l) => l.replace(/^- .+?: /, "- ")).join("\n")}`);
       if (!picks) continue;
       // However the model names it, these lines belong to this thing.
       const out = formatThings(picks.map((p) => ({ ...p, thing: name })), names, projectNotes, name).get(k) ?? [];
-      if (!out.length) continue;
+      if (out.length === ls.length && out.every((l, i) => l === ls[i])) continue;
       say(`${day} ${name}: ${ls.length} -> ${out.length}\n  ${out.join("\n  ")}`);
       things.set(k, out);
       removed += ls.length - out.length;

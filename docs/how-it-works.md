@@ -46,7 +46,7 @@ Writers don't add `[[links]]`. After every write, a background `autoblog link` a
 
 ## Timeline
 
-`timeline/YYYY-MM-DD.md` holds each project's most important work that day: one to three lines per project, the last often a summary of smaller things. On each sweep, a fast model (`timelineModel`, default `haiku`) reads each idle session's new activity, day by day, and rewrites the day's lines for the projects it touched, so later work folds into earlier lines. `autoblog timeline compact` condenses days logged before that limit. `autoblog timeline --from <transcripts…>` logs old sessions.
+`timeline/YYYY-MM-DD.md` holds what moved that day, held to a high bar: at most three lines per project (the one or two contributions that mattered, plus a line summing up smaller things when they add up), and often none. On each sweep, a model (`timelineModel`, default `sonnet`; `haiku` was too lenient about the bar) reads each idle session's new activity, day by day, and rewrites the day's lines for the projects it touched, so later work folds into earlier lines. `autoblog timeline compact` rewrites days logged before the current bar. `autoblog timeline --from <transcripts…>` logs old sessions.
 
 ## Annotations
 

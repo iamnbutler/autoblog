@@ -31,7 +31,7 @@ autoblog site setup | access | deploy | build | open | password
   "journal": "~/code/<you>-autoblog",
   "model": "opus",
   "linkModel": "sonnet",
-  "timelineModel": "haiku",
+  "timelineModel": "sonnet",
   "reflectEvery": 40,
   "reflectEveryTurns": 6,
   "idleMinutes": 20,

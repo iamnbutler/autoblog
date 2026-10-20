@@ -54,7 +54,7 @@ export const DEFAULTS: Config = {
   journal: join(HOME, "code", "autoblog"), // replaced by `autoblog init` with ~/code/<you>-autoblog
   model: "opus",
   linkModel: "sonnet",
-  timelineModel: "haiku",
+  timelineModel: "sonnet",
   reflectEvery: 40,
   reflectEveryTurns: 6,
   idleMinutes: 20,

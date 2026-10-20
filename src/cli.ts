@@ -28,7 +28,7 @@ Usage
                                     entries, most recently updated first
   autoblog search <words...> [-n N] rank notes and posts for some words (titles and tags count most)
   autoblog timeline [-n days] [--from <transcript.jsonl...>] [--dry-run]
-  autoblog timeline compact [day...] [--dry-run]   condense days logged too finely, to at most 3 lines per project
+  autoblog timeline compact [day...] [--dry-run]   rewrite old days to the current bar: at most 3 lines per project, often none
                                     the work log: recent days, or log given transcripts (a backfill)
   autoblog annotations [apply] [--all] [--dry-run]
                                     notes left on the site's pages; apply folds open ones in (the sweep does too)
