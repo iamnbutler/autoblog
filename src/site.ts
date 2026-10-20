@@ -134,7 +134,7 @@ export function buildSite(cfg: Config, out: string, siteName: string) {
   // The timeline: one file per day, one "- thing: what happened" line per piece of work.
   const tdir = timelineDir(cfg);
   const days = (existsSync(tdir) ? readdirSync(tdir) : []).filter((f) => /^\d{4}-\d{2}-\d{2}\.md$/.test(f)).map((f) => f.slice(0, -3)).sort().reverse();
-  const logged = days.map((day) => ({ day, lines: dayLines(cfg, day) }));
+  const logged = days.map((day) => ({ day, lines: dayLines(cfg, day) })).filter((d) => d.lines.length);
   const linesAbout = (pr: Note) =>
     logged.flatMap(({ day, lines }) => lines.filter((l) => l.toLowerCase().startsWith(`- [[${pr.name.toLowerCase()}]]`)).map((l) => ({ day, line: l })));
   const backlinks = (n: Note) =>

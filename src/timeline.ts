@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { STATE_DIR, type Config } from "./config";
@@ -51,6 +51,8 @@ function replaceLines(cfg: Config, day: string, things: Map<string, string[]>) {
     else if (!placed.has(k)) out.push(...things.get(k)!), placed.add(k);
   }
   for (const [k, ls] of things) if (!placed.has(k)) out.push(...ls);
+  // A day with nothing left that clears the bar has no file.
+  if (!out.length) return rmSync(dayFile(cfg, day), { force: true });
   writeFileSync(dayFile(cfg, day), `---\ndate: ${day}\ntype: timeline\n---\n\n${[...new Set(out)].join("\n")}\n`);
 }
 
